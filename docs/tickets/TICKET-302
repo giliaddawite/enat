@@ -1,0 +1,7 @@
+TICKET-302: Observability & cost monitoring
+
+Priority: P1 · Estimate: 2 pts · Depends on: 105
+
+- Dashboards: digest generation success rate, Gmail API error rate, LLM cost/day, API latency p50/p95
+- Alerting: digest job failure → notify you (email/Slack); LLM daily spend > threshold → alert
+- Log-based metric for summarization JSON-parse failures

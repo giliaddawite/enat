@@ -1,0 +1,17 @@
+TICKET-204: Digest screen
+
+Priority: P0 · Estimate: 5 pts · Depends on: 203, 105
+Displays the daily digest grouped by category, Amharic summaries, large cards.
+
+Tasks
+
+- Room database caching the last digest → screen opens instantly offline
+- Card per email: sender, Amharic summary, urgency badge; tap → detail view with "open in Gmail" deep link
+- Pull-to-refresh triggers on-demand generation (with loading state that explains itself in Amharic)
+- Empty/error states in plain Amharic ("ዛሬ አዲስ መልእክት የለም")
+
+Acceptance criteria
+
+- Airplane mode after one sync → digest still fully readable
+- p95 screen-open-to-content < 500ms from cache
+- UI tests cover loading/success/empty/error states

@@ -1,0 +1,18 @@
+TICKET-104: Summarization & categorization pipeline
+
+Priority: P0 · Estimate: 5 pts · Depends on: 103
+LLM pipeline that buckets emails and produces short Amharic summaries.
+
+Tasks
+
+- Categories: `Important`, `Bills & Accounts`, `Family & Personal`, `Promotions/Other`
+- One LLM call per digest batch (not per email) — pass N emails, request structured JSON out (category + 1-2 sentence Amharic summary + urgency flag per email). Validate JSON with a schema; retry once on parse failure
+- Cache results in Firestore keyed by `messageId` — never re-summarize the same email (cost efficiency)
+- Prompt versioning: store prompt template + version in repo; log version with each result
+- Guard: total input tokens capped per digest; overflow emails get category-only treatment via cheap heuristics (sender domain lists)
+
+Acceptance criteria
+
+- Cost per daily digest ≤ $0.05 at 50 emails/day (measure and document)
+- Malformed LLM output never reaches the client (schema-validated)
+- Golden-file tests: fixed email fixtures → assert category correctness

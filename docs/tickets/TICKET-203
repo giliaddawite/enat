@@ -1,0 +1,18 @@
+TICKET-203: Home hub screen (accessibility-first)
+
+Priority: P0 · Estimate: 5 pts · Depends on: 201
+The core screen: 3 oversized buttons — "የዛሬ መልእክቶች" (Today's mail), "የዛሬ ጥቅስ" (Today's verse), "ቤተሰብ ደውል" (Call family) — plus date/time in large type.
+
+Tasks
+
+- Min touch target 64dp (well above the 48dp guideline); min text size 20sp, scalable with system font settings
+- Full Amharic localization (`values-am/strings.xml`); English fallback
+- TalkBack support: content descriptions on everything, logical focus order
+- High-contrast colors meeting WCAG AA; no gesture-only interactions (everything tappable)
+- Quick-dial config (family contacts) stored locally, editable from a hidden settings screen (long-press app version)
+
+Acceptance criteria
+
+- Accessibility Scanner reports zero errors
+- Usable with system font size at maximum setting (no clipped text)
+- Every action reachable in ≤ 2 taps from launch

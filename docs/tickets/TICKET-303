@@ -1,0 +1,7 @@
+TICKET-303: Security review & privacy hardening
+
+Priority: P0 · Estimate: 2 pts · Depends on: 202
+
+- Verify: TLS everywhere, tokens encrypted at rest, no PII in logs (email bodies never logged), ProGuard/R8 enabled, dependency vulnerability scan (Dependabot) enabled
+- Data retention policy: raw email bodies never persisted server-side beyond the request; only summaries cached
+- Document what data lives where in `docs/privacy.md`

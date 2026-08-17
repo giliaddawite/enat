@@ -1,0 +1,17 @@
+TICKET-101: Backend service skeleton
+
+Priority: P0 · Estimate: 3 pts · Depends on: 002, 003
+Containerized API service on Cloud Run with health check, structured JSON logging, request-ID middleware, and centralized error handling.
+
+Tasks
+
+- `GET /healthz` endpoint
+- Structured logs (severity, requestId, latency) compatible with Cloud Logging
+- Global error handler that never leaks stack traces to clients
+- Config via environment variables validated at boot (fail fast on missing config)
+
+Acceptance criteria
+
+- Service scales to zero when idle (cost efficiency)
+- p50 cold start < 2s documented
+- All 5xx responses logged with request context

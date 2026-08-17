@@ -1,0 +1,17 @@
+TICKET-002: CI/CD pipeline
+
+Priority: P0 · Estimate: 3 pts · Depends on: 001
+GitHub Actions: on PR → lint + unit tests + Android assembleDebug; on merge to `main` → deploy backend to Cloud Run (staging), build signed AAB artifact.
+
+Tasks
+
+- PR workflow: ktlint, unit tests, backend tests, build check
+- Main workflow: backend Docker build → push to Artifact Registry → deploy to Cloud Run staging
+- Store signing keys and service-account creds in GitHub Secrets (never in repo)
+- Add status badges to README
+
+Acceptance criteria
+
+- A failing test blocks merge
+- Merge to main auto-deploys staging backend in < 10 min
+- No credentials appear in any tracked file (verified with gitleaks step in CI)

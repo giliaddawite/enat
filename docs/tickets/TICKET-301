@@ -1,0 +1,7 @@
+TICKET-301: Testing baseline
+
+Priority: P0 · Estimate: 3 pts · Depends on: 104, 204
+
+- Backend: unit tests ≥ 80% on pipeline logic; contract tests for `/v1/` schemas
+- Android: ViewModel unit tests; Compose UI tests for hub + digest; screenshot tests for both font-scale extremes
+- CI gates on all of the above

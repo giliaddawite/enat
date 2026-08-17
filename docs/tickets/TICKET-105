@@ -1,0 +1,17 @@
+TICKET-105: Digest API + scheduled generation
+
+Priority: P0 · Estimate: 3 pts · Depends on: 104
+`GET /v1/digest` returns today's digest; Cloud Scheduler triggers generation every morning (e.g., 6:30 AM ET) so the app opens to a pre-built digest instantly.
+
+Tasks
+
+- Cloud Scheduler → Pub/Sub → digest generation job (idempotent; safe to re-run)
+- Digest document in Firestore: `{date, userId, sections[], generatedAt, emailCount}`
+- API versioned under `/v1/` from day one
+- ETag/`If-None-Match` support so the app skips downloads when nothing changed
+
+Acceptance criteria
+
+- App fetch of a pre-generated digest returns in < 300ms p95
+- Re-running the job for the same day doesn't duplicate or double-bill
+- Missed-schedule fallback: app can request on-demand generation

@@ -1,0 +1,17 @@
+TICKET-102: Auth — verify Google ID tokens
+
+Priority: P0 · Estimate: 3 pts · Depends on: 101
+Every API request must carry a Google ID token from the Android app. Backend verifies signature, audience, and expiry; maps to an internal user record in Firestore.
+
+Tasks
+
+- Middleware verifying ID tokens against Google certs (cached JWKS)
+- Firestore `users` collection: `{uid, email, createdAt, locale, refreshTokenRef}`
+- Store Gmail OAuth refresh tokens in Secret Manager or KMS-encrypted Firestore field — never plaintext
+- Rate limiting per user (e.g., 60 req/min) to protect the Claude API budget
+
+Acceptance criteria
+
+- Requests without valid tokens → 401 with no detail leakage
+- Refresh tokens encrypted at rest; key rotation documented
+- Unit tests cover expired/wrong-audience/malformed tokens

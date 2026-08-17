@@ -1,0 +1,10 @@
+TICKET-206: Launcher/simplification mode (stretch)
+
+Priority: P2 · Estimate: 5 pts · Depends on: 203
+Optionally register the app as a launcher (home screen replacement) so the phone boots straight into the hub — the strongest version of "smooth navigation."
+
+Acceptance criteria
+
+- Exit path to normal launcher always available (for you)
+- Phone calls, camera, and settings remain reachable
+- Tested that system dialogs/emergency calls are never blocked

@@ -1,0 +1,17 @@
+TICKET-106: Daily verse service
+
+Priority: P1 · Estimate: 3 pts · Depends on: 101
+`GET /v1/verse/today` returns a verse in English + Amharic.
+
+Tasks
+
+- Source Amharic scripture from a public-domain Amharic Bible dataset (e.g., the 1962 Haile Selassie Version if licensing permits — verify licensing first) loaded into Firestore
+- Curated verse rotation list (365 entries) checked into repo as data, reviewed by you
+- Response cached at the edge (Cache-Control: 24h) — this endpoint should basically never cost anything
+- Fallback verse if lookup fails (never show an empty card)
+
+Acceptance criteria
+
+- Verse text verified against source for at least 10 spot-checked entries
+- Endpoint serves from cache after first daily hit
+- Licensing note documented in `docs/`

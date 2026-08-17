@@ -1,0 +1,10 @@
+TICKET-003: Google Cloud project & environments
+
+Priority: P0 · Estimate: 2 pts
+Create GCP project(s) with separate `staging` and `prod` environments. Enable Gmail API, set up OAuth consent screen (External, test users = mom + you), create OAuth client IDs (Android + backend).
+
+Acceptance criteria
+
+- OAuth consent screen approved for test users with `gmail.readonly` + `gmail.modify` scopes only (least privilege — no full mail scope)
+- Staging and prod use separate service accounts with minimal IAM roles
+- Billing alerts configured ($10, $25 thresholds)

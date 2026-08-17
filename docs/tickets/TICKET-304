@@ -1,0 +1,15 @@
+TICKET-304: Field test with mom
+
+Priority: P0 · Estimate: 2 pts · Depends on: 204, 205
+Install on her phone, observe a full week of real use.
+
+Tasks
+
+- Watch (don't help) during first session; note every hesitation and mis-tap
+- Collect: which categories she actually opens, whether summaries read naturally in Amharic, notification timing preference
+- File follow-up tickets from observations before adding any new features
+
+Acceptance criteria
+
+- She completes "check today's mail" unaided on day 2
+- At least one round of Amharic phrasing corrections applied from her feedback

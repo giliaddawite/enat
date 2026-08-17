@@ -1,0 +1,18 @@
+TICKET-103: Gmail ingestion service
+
+Priority: P0 · Estimate: 5 pts · Depends on: 102
+Fetch and normalize the user's recent inbox efficiently.
+
+Tasks
+
+- Use `users.messages.list` with `historyId`-based incremental sync (full sync only on first run) — avoids re-fetching the whole inbox
+- Batch `messages.get` calls (Gmail batch endpoint) with `format=metadata` first; fetch bodies only for messages that will be summarized
+- Normalize into internal `Email` model: `{id, threadId, from, subject, snippet, receivedAt, labels, bodyText}`
+- Strip HTML → plain text; truncate bodies to a max token budget before LLM calls
+- Exponential backoff + jitter on 429/5xx from Gmail API
+
+Acceptance criteria
+
+- Second sync of an unchanged inbox makes ≤ 2 API calls (history-based)
+- Handles inbox of 10k+ messages without OOM (streaming/pagination)
+- Integration test against Gmail API mock

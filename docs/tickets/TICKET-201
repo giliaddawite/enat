@@ -1,0 +1,10 @@
+TICKET-201: App scaffolding & architecture
+
+Priority: P0 · Estimate: 3 pts · Depends on: 001
+Single-module start (split into `:core`, `:feature-*` modules only when it grows), Jetpack Compose, MVVM + unidirectional data flow, Hilt DI, Retrofit/OkHttp, Kotlin coroutines + Flow.
+
+Acceptance criteria
+
+- Sample screen renders with ViewModel-driven state
+- Debug/release build variants pointing at staging/prod backends
+- Crash reporting (Crashlytics) wired in release builds

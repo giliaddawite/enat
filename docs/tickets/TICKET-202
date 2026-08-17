@@ -1,0 +1,16 @@
+TICKET-202: Google Sign-In + Gmail consent flow
+
+Priority: P0 · Estimate: 5 pts · Depends on: 201, 102
+One-time setup flow you'll run on mom's phone: sign in with Google, grant Gmail scopes, backend stores the refresh token.
+
+Tasks
+
+- Credential Manager API for sign-in; server auth code flow → backend exchanges for refresh token (token never lives only on device)
+- Setup flow designed for you-as-installer: clear steps, big text, error states with retry
+- Handle consent revocation: detect 401/invalid_grant → surface a "needs re-connect" card, not a crash
+
+Acceptance criteria
+
+- Full flow works on a physical device from a clean install
+- Token revocation mid-use degrades gracefully to re-auth prompt
+- No OAuth secrets in the APK (verified by decompiling the release build)

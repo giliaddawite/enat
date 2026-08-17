@@ -1,0 +1,10 @@
+TICKET-205: Verse screen + daily notification
+
+Priority: P1 · Estimate: 3 pts · Depends on: 203, 106
+Large-type verse card (Amharic primary, English secondary) + a gentle morning notification via WorkManager.
+
+Acceptance criteria
+
+- Notification fires within the target window even after device reboot (WorkManager constraints tested)
+- Verse cached daily; screen works offline
+- Notification respects Do Not Disturb
