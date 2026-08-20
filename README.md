@@ -1,5 +1,10 @@
 # Enat
 
+<!-- No git remote is configured yet — replace OWNER/fable-cooking below with
+     the real GitHub path once this repo is pushed (docs/ci-cd.md). -->
+[![PR](https://github.com/OWNER/fable-cooking/actions/workflows/pr.yml/badge.svg)](https://github.com/OWNER/fable-cooking/actions/workflows/pr.yml)
+[![Deploy](https://github.com/OWNER/fable-cooking/actions/workflows/deploy.yml/badge.svg)](https://github.com/OWNER/fable-cooking/actions/workflows/deploy.yml)
+
 An accessibility-first Android app that gives an Amharic-speaking parent a calm,
 readable view of their day: an LLM-generated digest of their Gmail inbox in
 Amharic, a daily verse, and one-tap family calling — all behind three oversized
@@ -96,18 +101,23 @@ TICKET-101 (backend) / TICKET-201 (Android).
 | Android tests | `./gradlew test` |
 | Android lint | `./gradlew ktlintCheck` |
 
-CI (TICKET-002) runs lint + tests + build on every PR; a failing check blocks
-merge.
+CI runs lint + unit tests + build check on every PR into `main`; a failing
+check blocks merge. Merging to `main` deploys the backend to Cloud Run staging
+and builds a signed Android release AAB. See [docs/ci-cd.md](docs/ci-cd.md)
+for the workflows and required secrets.
 
 ## Repository layout
 
 ```
 fable-cooking/
+├── .github/
+│   └── workflows/    # PR checks + main-branch deploy (TICKET-002)
 ├── android/          # (soon) Compose app — TICKET-2xx
 ├── backend/          # (soon) Cloud Run API — TICKET-1xx
 ├── infra/            # (soon) deploy config & IaC
 ├── docs/
 │   ├── architecture.md
+│   ├── ci-cd.md
 │   └── tickets/      # the full backlog, TICKET-001 … TICKET-304
 ├── scripts/
 │   └── preflight.sh  # environment checker

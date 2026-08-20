@@ -8,7 +8,6 @@
 
 ## Project overview
 
-<!-- TODO: replace once the stack is chosen. -->
 **What it is:** Enat — an accessibility-first Android app for an Amharic-speaking parent: an
 LLM-generated Amharic digest of their Gmail inbox, a daily verse, and one-tap family calling.
 Built and operated by one developer for one primary user. See `docs/architecture.md`.
@@ -24,23 +23,24 @@ the external services.
 
 ## Commands
 
-<!-- TODO: fill these in as soon as the toolchain exists. Claude runs whatever is listed here,
-     so an entry that doesn't work is worse than no entry. -->
+The only command that works today is `./scripts/preflight.sh` from the repo root — `/backend`
+and `/android` don't exist yet, so nothing below it runs until TICKET-101 / TICKET-201 create
+them. The rest of this table documents the commands those tickets are expected to wire up, run
+from inside each directory; update it to match reality as part of whichever ticket adds each
+script.
 
-Backend commands run in `/backend`, Android commands in `/android`. Both directories arrive
-with TICKET-101 / TICKET-201; until then only the repo-level commands exist.
-
-| Task | Command |
-| --- | --- |
-| Check local environment | `./scripts/preflight.sh` (repo root) |
-| Install dependencies | `npm install` |
-| Run the backend locally | `npm run dev` |
-| Run all backend tests | `npm test` |
-| Run a single backend test | `npm test -- <path-or-pattern>` |
-| Lint | `npm run lint` (backend) · `./gradlew ktlintCheck` (Android) |
-| Type check | `npm run typecheck` |
-| Build Android debug | `./gradlew assembleDebug` |
-| Android tests | `./gradlew test` |
+| Task | Command | Directory |
+| --- | --- | --- |
+| Check local environment | `./scripts/preflight.sh` | repo root |
+| Install dependencies | `npm install` | `backend/` |
+| Run the backend locally | `npm run dev` | `backend/` |
+| Run all backend tests | `npm test` | `backend/` |
+| Run a single backend test | `npm test -- <path-or-pattern>` | `backend/` |
+| Backend lint | `npm run lint` | `backend/` |
+| Backend type check | `npm run typecheck` | `backend/` |
+| Android debug build | `./gradlew assembleDebug` | `android/` |
+| Android tests | `./gradlew test` | `android/` |
+| Android lint | `./gradlew ktlintCheck` | `android/` |
 
 **Prefer the narrowest command that answers the question.** Run a single test file while
 iterating; run the full suite once before declaring work done.
@@ -155,16 +155,17 @@ iterating; run the full suite once before declaring work done.
 
 ## Directory layout
 
-<!-- TODO: fill in once the structure exists. -->
-
 ```
 fable-cooking/
 ├── .claude/          # Claude Code settings, agents, and skills
+├── .github/
+│   └── workflows/    # PR checks + main-branch deploy (TICKET-002)
 ├── android/          # (TICKET-201) Compose app
 ├── backend/          # (TICKET-101) Cloud Run API
-├── infra/            # (TICKET-002/003) deploy config & IaC
+├── infra/            # (TICKET-003) deploy config & IaC
 ├── docs/
 │   ├── architecture.md   # system design: app → backend → Gmail/Claude
+│   ├── ci-cd.md          # CI/CD workflows and required secrets
 │   └── tickets/          # backlog, TICKET-001 … TICKET-304
 ├── scripts/
 │   └── preflight.sh  # fresh-clone environment checker
