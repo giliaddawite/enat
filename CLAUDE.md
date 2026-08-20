@@ -9,11 +9,16 @@
 ## Project overview
 
 <!-- TODO: replace once the stack is chosen. -->
-**What it is:** _one or two sentences on what fable-cooking does and who uses it._
+**What it is:** Enat — an accessibility-first Android app for an Amharic-speaking parent: an
+LLM-generated Amharic digest of their Gmail inbox, a daily verse, and one-tap family calling.
+Built and operated by one developer for one primary user. See `docs/architecture.md`.
 
-**Stack:** _language, runtime, framework, package manager, database._
+**Stack:** Android app in Kotlin/Jetpack Compose (MVVM, Hilt, Retrofit); backend in
+Node.js 22/TypeScript on Cloud Run with npm; Firestore for data; Gmail API and Claude API as
+the external services.
 
-**Status:** Greenfield — the repository is empty apart from tooling config.
+**Status:** Bootstrap — docs, shared config, and the ticket backlog (`docs/tickets/`) exist;
+`/backend` lands with TICKET-101 and `/android` with TICKET-201.
 
 ---
 
@@ -22,16 +27,20 @@
 <!-- TODO: fill these in as soon as the toolchain exists. Claude runs whatever is listed here,
      so an entry that doesn't work is worse than no entry. -->
 
+Backend commands run in `/backend`, Android commands in `/android`. Both directories arrive
+with TICKET-101 / TICKET-201; until then only the repo-level commands exist.
+
 | Task | Command |
 | --- | --- |
-| Install dependencies | `TODO` |
-| Run the app locally | `TODO` |
-| Run all tests | `TODO` |
-| Run a single test | `TODO` |
-| Lint | `TODO` |
-| Format | `TODO` |
-| Type check | `TODO` |
-| Build for production | `TODO` |
+| Check local environment | `./scripts/preflight.sh` (repo root) |
+| Install dependencies | `npm install` |
+| Run the backend locally | `npm run dev` |
+| Run all backend tests | `npm test` |
+| Run a single backend test | `npm test -- <path-or-pattern>` |
+| Lint | `npm run lint` (backend) · `./gradlew ktlintCheck` (Android) |
+| Type check | `npm run typecheck` |
+| Build Android debug | `./gradlew assembleDebug` |
+| Android tests | `./gradlew test` |
 
 **Prefer the narrowest command that answers the question.** Run a single test file while
 iterating; run the full suite once before declaring work done.
@@ -151,5 +160,15 @@ iterating; run the full suite once before declaring work done.
 ```
 fable-cooking/
 ├── .claude/          # Claude Code settings, agents, and skills
-└── CLAUDE.md         # this file
+├── android/          # (TICKET-201) Compose app
+├── backend/          # (TICKET-101) Cloud Run API
+├── infra/            # (TICKET-002/003) deploy config & IaC
+├── docs/
+│   ├── architecture.md   # system design: app → backend → Gmail/Claude
+│   └── tickets/          # backlog, TICKET-001 … TICKET-304
+├── scripts/
+│   └── preflight.sh  # fresh-clone environment checker
+├── CLAUDE.md         # this file
+├── CONTRIBUTING.md   # branch naming, conventional commits, review
+└── README.md         # local setup path
 ```

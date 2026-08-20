@@ -1,0 +1,54 @@
+# Secrets — see .env.example for the key names. Nothing with a real value
+# belongs in this repository (CLAUDE.md § Security).
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+*.keystore
+service-account*.json
+gha-creds-*.json
+
+# Node / backend
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.npm/
+npm-debug.log*
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/google-services.json
+android/captures/
+*.apk
+*.aab
+.cxx/
+
+# Terraform / infra
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local state (settings.json and agents/ are tracked deliberately)
+.claude/worktrees/
+.claude/settings.local.json
