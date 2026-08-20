@@ -1,0 +1,15 @@
+TICKET-001: Repository & project scaffolding
+
+Priority: P0 · Estimate: 2 pts Set up a monorepo (/android, /backend, /infra, /docs) with a root README describing architecture and local setup.
+
+Tasks
+
+Initialize Git repo with .gitignore for Android + Node/Python
+Add docs/architecture.md with a system diagram (app → backend → Gmail API / Claude API)
+Add CONTRIBUTING.md with branch naming (feat/, fix/, chore/) and conventional commits
+Configure EditorConfig + ktlint (Android) and ESLint/Prettier or Ruff (backend)
+
+Acceptance criteria
+
+ Fresh clone → documented setup steps produce a running dev environment
+ Lint runs locally via one command per package
