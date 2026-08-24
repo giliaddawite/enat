@@ -19,7 +19,7 @@ before it can be applied would only drift.
 `service.staging.yaml` contains two placeholders that the deploy step substitutes:
 
 - `IMAGE_PLACEHOLDER` — the digest-pinned Artifact Registry image, e.g.
-  `europe-west1-docker.pkg.dev/<project>/enat/api@sha256:<digest>`.
+  `us-central1-docker.pkg.dev/<project>/enat/backend@sha256:<digest>`.
 - `PROJECT_ID_PLACEHOLDER` — the staging GCP project id. The `_PLACEHOLDER` suffix is
   load-bearing: a bare `PROJECT_ID` token would also match inside the `GCP_PROJECT_ID`
   env var name during global substitution.
@@ -30,7 +30,7 @@ Requires the staging project and service account from TICKET-003. The automated 
 TICKET-002.
 
 ```sh
-gcloud run services replace infra/cloudrun/service.staging.yaml --region europe-west1
+gcloud run services replace infra/cloudrun/service.staging.yaml --region us-central1
 ```
 
 ## Do not make this service public yet
