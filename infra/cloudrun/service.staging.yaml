@@ -1,0 +1,77 @@
+# Cloud Run service definition for the staging API.
+#
+# Apply with:
+#   gcloud run services replace infra/cloudrun/service.staging.yaml --region europe-west1
+#
+# The two placeholder tokens (for the image and the project id) are substituted by the
+# deploy workflow (TICKET-002) before `gcloud run services replace`. Deploying by digest
+# rather than by tag keeps a rollback pointing at the exact bytes that were tested. The
+# project-id token carries a suffix so a global substitution cannot touch the
+# GCP_PROJECT_ID env var *name* below — and no comment here may spell a token out, or it
+# would trip the workflow's leftover-placeholder check after rendering.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: enat-api-staging
+  labels:
+    environment: staging
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scale to zero when idle: no instance, no charge. This is the cost control for a
+        # service whose real traffic is one household.
+        autoscaling.knative.dev/minScale: '0'
+        # Cap the blast radius of a traffic spike or a retry storm on the Claude API budget.
+        autoscaling.knative.dev/maxScale: '3'
+        # Cold start mitigation: full CPU during container startup, billed only for that
+        # startup time.
+        run.googleapis.com/startup-cpu-boost: 'true'
+        # Bill CPU only while a request is in flight. This is the platform default, pinned
+        # explicitly because flipping it to false is the one setting here that turns a
+        # near-zero bill into a real one: CPU would then be billed for an instance's whole
+        # lifetime, not just its requests.
+        run.googleapis.com/cpu-throttling: 'true'
+        # First generation has lower cold-start latency and no feature here needs gen2.
+        # Pinned rather than left to the platform default, which the cold-start budget in
+        # docs/backend-runtime.md depends on.
+        run.googleapis.com/execution-environment: gen1
+    spec:
+      # One instance serves many concurrent requests, so scaling out is rare and the
+      # already-warm instance absorbs bursts instead of cold-starting a new one.
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      serviceAccountName: enat-api-staging@PROJECT_ID_PLACEHOLDER.iam.gserviceaccount.com
+      containers:
+        - image: IMAGE_PLACEHOLDER
+          ports:
+            - name: http1
+              containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: LOG_LEVEL
+              value: info
+            - name: GCP_PROJECT_ID
+              value: PROJECT_ID_PLACEHOLDER
+          resources:
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          # Startup only. A liveness probe against a dependency-free /healthz can fail only
+          # if the process is already dead — which Cloud Run handles anyway — or if the
+          # event loop is briefly wedged, in which case it would restart the container and
+          # kill in-flight work. Once paid API calls sit behind this service, that restart
+          # is the one mechanism here that could duplicate a billed call.
+          startupProbe:
+            httpGet:
+              path: /healthz
+            initialDelaySeconds: 0
+            periodSeconds: 1
+            failureThreshold: 10
+            timeoutSeconds: 1
+  traffic:
+    - percent: 100
+      latestRevision: true
