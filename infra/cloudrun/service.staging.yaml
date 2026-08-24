@@ -56,6 +56,13 @@ spec:
               value: info
             - name: GCP_PROJECT_ID
               value: PROJECT_ID_PLACEHOLDER
+            # Required at boot when NODE_ENV=production (TICKET-102): the OAuth client
+            # ID(s) an ID token's aud claim must match. Substituted from a GitHub secret
+            # like the project id above; the deploy workflow refuses to render if the
+            # secret is unset, so a misconfigured deploy fails in CI instead of crash-
+            # looping the service.
+            - name: GOOGLE_OAUTH_AUDIENCE
+              value: OAUTH_AUDIENCE_PLACEHOLDER
           resources:
             limits:
               cpu: '1'
