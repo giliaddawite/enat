@@ -1,7 +1,7 @@
 # Cloud Run service definition for the staging API.
 #
 # Apply with:
-#   gcloud run services replace infra/cloudrun/service.staging.yaml --region europe-west1
+#   gcloud run services replace infra/cloudrun/service.staging.yaml --region us-central1
 #
 # The two placeholder tokens (for the image and the project id) are substituted by the
 # deploy workflow (TICKET-002) before `gcloud run services replace`. Deploying by digest

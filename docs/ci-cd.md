@@ -45,7 +45,7 @@ project, service accounts, and IAM roles these secrets point at.
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | deploy-backend | Workload Identity Federation provider resource name — no long-lived service-account key is stored anywhere |
 | `GCP_DEPLOY_SERVICE_ACCOUNT` | deploy-backend | staging deploy service account email, minimal IAM (TICKET-003) |
 | `GCP_PROJECT_ID` | deploy-backend | staging GCP project ID |
-| `GCP_REGION` | deploy-backend | `europe-west1` — must match the region conventions in `infra/` |
+| `GCP_REGION` | deploy-backend | `us-central1` — must match the region conventions in `infra/` |
 | `ARTIFACT_REGISTRY_REPO` | deploy-backend | Artifact Registry repository name |
 | `ANDROID_KEYSTORE_BASE64` | build-android-release | release keystore, base64-encoded |
 | `ANDROID_KEYSTORE_PASSWORD` | build-android-release | |
