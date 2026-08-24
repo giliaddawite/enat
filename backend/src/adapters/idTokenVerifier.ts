@@ -15,7 +15,7 @@ export type IdTokenRejectionReason =
   | 'wrong_audience'
   | 'invalid_signature'
   | 'invalid_claims'
-  | 'verification_unavailable';
+  | 'unverified_email';
 
 /**
  * Thrown for any token an `IdTokenVerifier` will not vouch for. `reason` exists for logs
@@ -29,6 +29,19 @@ export class IdTokenRejectedError extends Error {
     super(message, options);
     this.name = 'IdTokenRejectedError';
     this.reason = reason;
+  }
+}
+
+/**
+ * Thrown when a token could not be *checked* at all — Google's JWKS endpoint unreachable,
+ * a malformed key set, an unexpected jose failure. Distinct from `IdTokenRejectedError`
+ * on purpose: this is our outage, not the caller's bad token, and the HTTP layer must
+ * answer it with a 5xx so a valid client retries instead of discarding its session.
+ */
+export class IdTokenVerificationUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'IdTokenVerificationUnavailableError';
   }
 }
 
@@ -106,7 +119,7 @@ async function verifyClaims(
   }
 }
 
-function toRejection(error: unknown): IdTokenRejectedError {
+function toRejection(error: unknown): IdTokenRejectedError | IdTokenVerificationUnavailableError {
   if (error instanceof joseErrors.JWTExpired) {
     return new IdTokenRejectedError('expired_token', 'ID token is expired', { cause: error });
   }
@@ -115,7 +128,13 @@ function toRejection(error: unknown): IdTokenRejectedError {
       cause: error,
     });
   }
-  if (error instanceof joseErrors.JWSSignatureVerificationFailed) {
+  if (
+    error instanceof joseErrors.JWSSignatureVerificationFailed ||
+    // A well-formed token whose `kid` names a key Google never published is a forgery
+    // signal, not a JWKS problem on our side — the key set was fetched fine and simply
+    // does not contain the claimed key.
+    error instanceof joseErrors.JWKSNoMatchingKey
+  ) {
     return new IdTokenRejectedError('invalid_signature', 'ID token signature invalid', {
       cause: error,
     });
@@ -127,9 +146,10 @@ function toRejection(error: unknown): IdTokenRejectedError {
   ) {
     return new IdTokenRejectedError('malformed_token', 'ID token malformed', { cause: error });
   }
-  // Anything else (JWKS fetch failure, an unexpected jose error) is still a rejection, not a
-  // crash — an unreachable Google is not grounds for treating a caller as authenticated.
-  return new IdTokenRejectedError('verification_unavailable', 'ID token could not be verified', {
+  // Anything else — JWKS fetch failure or timeout, a malformed key set, an unexpected jose
+  // error — means the token could not be checked at all. That is our outage, not the
+  // caller's bad token: a 401 here would make a healthy client discard a valid session.
+  return new IdTokenVerificationUnavailableError('ID token verification unavailable', {
     cause: error,
   });
 }

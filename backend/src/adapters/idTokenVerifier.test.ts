@@ -1,6 +1,10 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { createGoogleIdTokenVerifier, IdTokenRejectedError } from './idTokenVerifier.js';
+import {
+  createGoogleIdTokenVerifier,
+  IdTokenRejectedError,
+  IdTokenVerificationUnavailableError,
+} from './idTokenVerifier.js';
 
 const AUDIENCE = 'mom-android-app.apps.googleusercontent.com';
 const OTHER_AUDIENCE = 'some-other-client.apps.googleusercontent.com';
@@ -10,6 +14,7 @@ interface KeySet {
   sign(claims: Record<string, unknown>, options?: SignOptions): Promise<string>;
   readonly jwks: ReturnType<typeof createLocalJWKSet>;
   wrongKeySign(claims: Record<string, unknown>): Promise<string>;
+  unknownKidSign(claims: Record<string, unknown>): Promise<string>;
 }
 
 interface SignOptions {
@@ -46,7 +51,18 @@ async function buildKeySet(): Promise<KeySet> {
       .setAudience(AUDIENCE)
       .sign(wrongPrivateKey);
 
-  return { sign, jwks, wrongKeySign };
+  // A well-formed token claiming a `kid` the key set has never heard of — the other
+  // forgery shape, which jose reports as JWKSNoMatchingKey rather than a signature failure.
+  const unknownKidSign = (claims: Record<string, unknown>): Promise<string> =>
+    new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid: 'not-a-google-key' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .sign(privateKey);
+
+  return { sign, jwks, wrongKeySign, unknownKidSign };
 }
 
 const VALID_CLAIMS = {
@@ -130,6 +146,31 @@ describe('createGoogleIdTokenVerifier', () => {
 
     expect(error).toBeInstanceOf(IdTokenRejectedError);
     expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
+
+  it('rejects a token whose kid is not in the key set as a signature failure', async () => {
+    const token = await keys.unknownKidSign(VALID_CLAIMS);
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
+
+  it('reports a key-set fetch failure as unavailable, not as a token rejection', async () => {
+    const failing = createGoogleIdTokenVerifier({
+      audience: [AUDIENCE],
+      jwks: () => {
+        throw new Error('getaddrinfo ENOTFOUND www.googleapis.com');
+      },
+    });
+    const token = await keys.sign(VALID_CLAIMS);
+
+    const error = await failing.verify(token).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenVerificationUnavailableError);
   });
 
   it('rejects a malformed, non-JWT string without throwing an unhandled error', async () => {
