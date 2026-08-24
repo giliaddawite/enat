@@ -70,19 +70,21 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew ktlintCheck
-      - run: ./gradlew test
+      - run: ./gradlew testDebugUnitTest
       - run: ./gradlew assembleDebug
 
   pr-required-checks:
     name: pr-required-checks
     if: always()
-    needs: [secrets-scan, backend, android]
+    # detect is listed too: if it fails, backend/android are skipped, and a skip
+    # must not read as a pass when its gatekeeper never ran.
+    needs: [detect, secrets-scan, backend, android]
     runs-on: ubuntu-latest
     steps:
       - name: fail if any required job failed
         run: |
           fail=0
-          for result in "${{ needs.secrets-scan.result }}" "${{ needs.backend.result }}" "${{ needs.android.result }}"; do
+          for result in "${{ needs.detect.result }}" "${{ needs.secrets-scan.result }}" "${{ needs.backend.result }}" "${{ needs.android.result }}"; do
             if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
               fail=1
             fi
