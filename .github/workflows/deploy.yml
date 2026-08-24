@@ -1,0 +1,155 @@
+name: Deploy
+
+# TICKET-002: on every push to main, build and deploy the backend to Cloud Run
+# staging and build a signed Android release AAB artifact. Both jobs are
+# guarded on their directory existing so this workflow activates automatically
+# once TICKET-101 (backend) / TICKET-201 (android) land — nothing here needs
+# to change at that point.
+#
+# Required GitHub secrets (repo or environment scoped — see docs/ci-cd.md):
+#   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT, GCP_PROJECT_ID,
+#   GCP_REGION, ARTIFACT_REGISTRY_REPO
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
+#   ANDROID_KEY_PASSWORD
+# None of these have values in this repository — they're set in
+# GitHub → Settings → Secrets and variables → Actions, never committed.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: detect changed workspaces
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        run: |
+          test -f backend/package.json && echo "backend=true" >> "$GITHUB_OUTPUT" || echo "backend=false" >> "$GITHUB_OUTPUT"
+          test -f android/settings.gradle.kts && echo "android=true" >> "$GITHUB_OUTPUT" || echo "android=false" >> "$GITHUB_OUTPUT"
+
+  secrets-scan:
+    name: secrets scan
+    uses: ./.github/workflows/secrets-scan.yml
+
+  deploy-backend:
+    name: deploy backend to Cloud Run (staging)
+    needs: [detect, secrets-scan]
+    if: needs.detect.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    defaults:
+      run:
+        working-directory: backend
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation — no long-lived key checked out
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # Re-verify on the actual merged commit — the PR check ran against the
+      # pre-merge tree, which is usually but not always identical.
+      - run: npm ci
+      - run: npm test
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      - name: build and push image
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/backend
+        run: |
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      # The service definition in infra/ is the source of truth for runtime config:
+      # env vars (GCP_PROJECT_ID is required at boot in production), scaling limits,
+      # and the cost-control annotations. `gcloud run deploy --image` would create a
+      # service with none of them, so the YAML is rendered and applied instead. The
+      # image is pinned by digest so a rollback points at the exact bytes tested.
+      - name: resolve pushed image digest
+        id: digest
+        env:
+          IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/backend
+        run: |
+          echo "ref=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:${{ github.sha }}")" >> "$GITHUB_OUTPUT"
+
+      - name: render and apply Cloud Run service definition
+        working-directory: .
+        run: |
+          sed -e "s|IMAGE_PLACEHOLDER|${{ steps.digest.outputs.ref }}|" \
+              -e "s|PROJECT_ID_PLACEHOLDER|${{ secrets.GCP_PROJECT_ID }}|g" \
+              infra/cloudrun/service.staging.yaml > "$RUNNER_TEMP/service.staging.rendered.yaml"
+          if grep -q "_PLACEHOLDER" "$RUNNER_TEMP/service.staging.rendered.yaml"; then
+            echo "unsubstituted placeholder remains in rendered service definition" >&2
+            exit 1
+          fi
+          gcloud run services replace "$RUNNER_TEMP/service.staging.rendered.yaml" \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --region "${{ secrets.GCP_REGION }}" \
+            --quiet
+
+  build-android-release:
+    name: build signed Android release AAB
+    needs: [detect, secrets-scan]
+    if: needs.detect.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: decode signing keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > release.keystore.jks
+
+      - name: build release AAB
+        env:
+          ANDROID_KEYSTORE_PATH: android/release.keystore.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew bundleRelease
+
+      - name: remove keystore
+        if: always()
+        run: rm -f release.keystore.jks
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-release-${{ github.sha }}
+          path: android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30

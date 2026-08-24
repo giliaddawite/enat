@@ -1,0 +1,49 @@
+# Repo-wide style rules. Editors apply these automatically; the language
+# formatters (Prettier, ktlint) enforce the same values in CI.
+# https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# Kotlin and Java follow the Android/Kotlin convention of 4-space indents.
+# ktlint reads these keys directly, so this file is the single source of truth
+# for Android formatting too.
+[*.{kt,kts,java}]
+indent_size = 4
+max_line_length = 120
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+[*.{gradle,pro}]
+indent_size = 4
+
+[*.{py,sh,bash}]
+indent_size = 4
+
+# Makefiles are tab-significant.
+[Makefile]
+indent_style = tab
+
+# Amharic string resources are hand-edited and reviewed line by line; keeping
+# trailing whitespace visible avoids silently altering translated text.
+[**/values-am/*.xml]
+trim_trailing_whitespace = false
+
+# Markdown uses two trailing spaces for hard line breaks.
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = 100
+
+# Generated and vendored files are formatted by their producers.
+[{**/build/**,**/node_modules/**,*.min.*,package-lock.json}]
+indent_size = unset
+max_line_length = unset
+insert_final_newline = unset

@@ -1,0 +1,24 @@
+# Normalize all text files to LF in the repository and on checkout, so Prettier
+# and ktlint see identical bytes on every OS. Without this, a Windows clone with
+# core.autocrlf=true checks out CRLF and every formatter check fails locally
+# while passing in CI.
+* text=auto eol=lf
+
+# Windows batch files require CRLF to run.
+*.bat text eol=crlf
+
+# Binaries — never subject to EOL conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.jks binary
+*.keystore binary
+*.apk binary
+*.aab binary
+*.zip binary
+*.p12 binary
+*.pem binary
