@@ -1,4 +1,5 @@
 import type { Logger } from '../logging/logger.js';
+import type { User } from '../domain/user.js';
 
 declare global {
   namespace Express {
@@ -11,6 +12,8 @@ declare global {
       requestId?: string;
       /** Request-scoped logger set by the requestLogging middleware. See `requestId`. */
       log?: Logger;
+      /** Set by the `authenticate` middleware once the Google ID token is verified. */
+      user?: User;
     }
   }
 }
