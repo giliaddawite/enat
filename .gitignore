@@ -52,3 +52,4 @@ Thumbs.db
 # Claude Code local state (settings.json and agents/ are tracked deliberately)
 .claude/worktrees/
 .claude/settings.local.json
+.claude/agent-memory/
