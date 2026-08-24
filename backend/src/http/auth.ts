@@ -1,5 +1,9 @@
 import type { Request, RequestHandler } from 'express';
-import { IdTokenRejectedError, type IdTokenVerifier } from '../adapters/idTokenVerifier.js';
+import {
+  IdTokenRejectedError,
+  IdTokenVerificationUnavailableError,
+  type IdTokenVerifier,
+} from '../adapters/idTokenVerifier.js';
 import type { UsersRepository } from '../adapters/usersRepository.js';
 import type { User } from '../domain/user.js';
 import { HttpError } from './httpError.js';
@@ -16,11 +20,17 @@ const BEARER_PREFIX = 'Bearer ';
  * it to an internal user, attaching the result to `req.user` for downstream handlers.
  *
  * Every rejection reason — missing header, malformed token, expired token, wrong audience,
- * bad signature — collapses to the same generic 401. `HttpError`'s default message is what
- * reaches the client, so it is never overridden here: a distinguishable response per reason
- * is exactly the enumeration oracle a login endpoint must not offer. A failure that is *not*
- * a token rejection (e.g. Firestore unreachable) is passed through unchanged so the global
- * error handler reports it as the 500 it is, rather than being misreported as a bad token.
+ * bad signature — collapses to the same generic 401. `HttpError`'s default
+ * message is what reaches the client, so it is never overridden here: a distinguishable
+ * response per reason is exactly the enumeration oracle a login endpoint must not offer.
+ *
+ * Failures that are *ours*, not the caller's, stay 5xx: an unreachable JWKS endpoint
+ * becomes a 503 so a healthy client retries instead of discarding a valid session, and any
+ * other error (e.g. Firestore unreachable) passes through unchanged so the global error
+ * handler reports it as the 500 it is, rather than being misreported as a bad token.
+ *
+ * Known limitation, accepted for now: every authenticated request costs one Firestore
+ * document read (no user cache). Revisit alongside the /v1/digest p95 budget work.
  */
 export function authenticate({
   idTokenVerifier,
@@ -38,6 +48,13 @@ export function authenticate({
           next(new HttpError(401));
           return;
         }
+        if (error instanceof IdTokenVerificationUnavailableError) {
+          // The cause (JWKS fetch failure etc.) is logged here because the error handler
+          // only describes the top-level error, and this one exists to wrap another.
+          req.log?.error('id token verification unavailable', { error: describeCause(error) });
+          next(new HttpError(503));
+          return;
+        }
         next(error);
       },
     );
@@ -52,6 +69,14 @@ async function resolveUser(
   const token = extractBearerToken(req.get('Authorization'));
   const verified = await idTokenVerifier.verify(token);
   return usersRepository.findOrCreateByGoogleId(verified);
+}
+
+function describeCause(error: Error): Record<string, unknown> {
+  const { cause } = error;
+  if (cause instanceof Error) {
+    return { name: cause.name, message: cause.message };
+  }
+  return { name: 'NonError', type: typeof cause };
 }
 
 function extractBearerToken(header: string | undefined): string {

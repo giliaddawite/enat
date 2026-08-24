@@ -2,6 +2,7 @@ import express from 'express';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   IdTokenRejectedError,
+  IdTokenVerificationUnavailableError,
   type IdTokenRejectionReason,
   type IdTokenVerifier,
   type VerifiedIdToken,
@@ -210,6 +211,54 @@ describe('authenticate', () => {
     await logs.waitFor(isRejectionLog);
 
     expect(JSON.stringify(logs.entries)).not.toContain(VALID_TOKEN);
+  });
+
+  it('answers 503 when token verification itself is unavailable, so clients retry', async () => {
+    const unavailableVerifier: IdTokenVerifier = {
+      verify: () =>
+        Promise.reject(
+          new IdTokenVerificationUnavailableError('ID token verification unavailable', {
+            cause: new Error('JWKS fetch timed out'),
+          }),
+        ),
+    };
+    const { server: running } = await serve(unavailableVerifier, fixedUsersRepository());
+
+    const response = await running.fetch('/protected', { headers: authHeader(VALID_TOKEN) });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'service_unavailable',
+        message: 'Service Unavailable',
+        requestId: 'fixed-request-id',
+      },
+    });
+  });
+
+  it('logs the cause of a verification outage without exposing it to the client', async () => {
+    const unavailableVerifier: IdTokenVerifier = {
+      verify: () =>
+        Promise.reject(
+          new IdTokenVerificationUnavailableError('ID token verification unavailable', {
+            cause: new Error('getaddrinfo ENOTFOUND www.googleapis.com'),
+          }),
+        ),
+    };
+    const { server: running, logs } = await serve(unavailableVerifier, fixedUsersRepository());
+
+    const body = await (
+      await running.fetch('/protected', { headers: authHeader(VALID_TOKEN) })
+    ).text();
+    const entry = await logs.waitFor(
+      (candidate) => candidate.message === 'id token verification unavailable',
+    );
+
+    expect(body).not.toContain('ENOTFOUND');
+    expect(entry).toMatchObject({
+      severity: 'ERROR',
+      error: { name: 'Error', message: 'getaddrinfo ENOTFOUND www.googleapis.com' },
+    });
   });
 
   it('reports a users-repository failure as a 500, not a 401', async () => {
