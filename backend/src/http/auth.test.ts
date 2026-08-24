@@ -156,6 +156,7 @@ describe('authenticate', () => {
       'malformed_token',
       'invalid_signature',
       'invalid_claims',
+      'unverified_email',
     ];
 
     // Sequential, each server closed (and the shared `server` cleared) before the next is
@@ -211,6 +212,38 @@ describe('authenticate', () => {
     await logs.waitFor(isRejectionLog);
 
     expect(JSON.stringify(logs.entries)).not.toContain(VALID_TOKEN);
+  });
+
+  it('rejects a valid token whose email Google has not verified, with the same opaque 401', async () => {
+    const { server: running } = await serve(
+      scriptedVerifier({ [VALID_TOKEN]: { ...MOM, emailVerified: false } }),
+      fixedUsersRepository(),
+    );
+
+    const response = await running.fetch('/protected', { headers: authHeader(VALID_TOKEN) });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: 'unauthorized', message: 'Unauthorized', requestId: 'fixed-request-id' },
+    });
+  });
+
+  it('never creates a user record for a token with an unverified email', async () => {
+    let created = false;
+    const spyingRepository: UsersRepository = {
+      findOrCreateByGoogleId: () => {
+        created = true;
+        return Promise.resolve(MOM_RECORD);
+      },
+    };
+    const { server: running } = await serve(
+      scriptedVerifier({ [VALID_TOKEN]: { ...MOM, emailVerified: false } }),
+      spyingRepository,
+    );
+
+    await running.fetch('/protected', { headers: authHeader(VALID_TOKEN) });
+
+    expect(created).toBe(false);
   });
 
   it('answers 503 when token verification itself is unavailable, so clients retry', async () => {

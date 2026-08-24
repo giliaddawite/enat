@@ -20,7 +20,7 @@ const BEARER_PREFIX = 'Bearer ';
  * it to an internal user, attaching the result to `req.user` for downstream handlers.
  *
  * Every rejection reason — missing header, malformed token, expired token, wrong audience,
- * bad signature — collapses to the same generic 401. `HttpError`'s default
+ * bad signature, unverified email — collapses to the same generic 401. `HttpError`'s default
  * message is what reaches the client, so it is never overridden here: a distinguishable
  * response per reason is exactly the enumeration oracle a login endpoint must not offer.
  *
@@ -68,6 +68,12 @@ async function resolveUser(
 ): Promise<User> {
   const token = extractBearerToken(req.get('Authorization'));
   const verified = await idTokenVerifier.verify(token);
+  if (!verified.emailVerified) {
+    // Google vouches for the signature but not for the email's ownership. Persisting an
+    // unverified address as the canonical users.email would let a Google account with a
+    // claimed-but-unproven email become that address's user record.
+    throw new IdTokenRejectedError('unverified_email', 'ID token email is not verified');
+  }
   return usersRepository.findOrCreateByGoogleId(verified);
 }
 
