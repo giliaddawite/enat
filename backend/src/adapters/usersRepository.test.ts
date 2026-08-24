@@ -36,6 +36,14 @@ function fakeFirestore(seed: Record<string, Record<string, unknown>> = {}): {
               documents[key] = data;
               return Promise.resolve(undefined);
             },
+            update: (data) => {
+              const current = documents[key];
+              if (current === undefined) {
+                return Promise.reject(Object.assign(new Error('NOT_FOUND'), { code: 5 }));
+              }
+              documents[key] = { ...current, ...data };
+              return Promise.resolve(undefined);
+            },
           };
         },
       };
@@ -96,6 +104,7 @@ describe('createFirestoreUsersRepository', () => {
           documents[`users/${id}`] = { ...data, createdAt: '2019-01-01T00:00:00.000Z' };
           return Promise.reject(Object.assign(new Error('ALREADY_EXISTS'), { code: 6 }));
         },
+        update: (data) => doc.update(data),
       };
     };
     const repository = createFirestoreUsersRepository(firestore, NOW);
@@ -103,6 +112,39 @@ describe('createFirestoreUsersRepository', () => {
     const user = await repository.findOrCreateByGoogleId(IDENTITY);
 
     expect(user.createdAt).toBe('2019-01-01T00:00:00.000Z');
+  });
+
+  it('updates the stored email when the verified token carries a different one', async () => {
+    const existing = {
+      uid: 'google-user-123',
+      email: 'old-address@example.com',
+      createdAt: '2020-01-01T00:00:00.000Z',
+      locale: 'am',
+      refreshTokenRef: null,
+    };
+    const { firestore, documents } = fakeFirestore({ 'users/google-user-123': existing });
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    const user = await repository.findOrCreateByGoogleId(IDENTITY);
+
+    expect(user.email).toBe('mom@example.com');
+    expect(documents['users/google-user-123']).toEqual({ ...existing, email: 'mom@example.com' });
+  });
+
+  it('leaves createdAt, locale and refreshTokenRef untouched when reconciling the email', async () => {
+    const existing = {
+      uid: 'google-user-123',
+      email: 'old-address@example.com',
+      createdAt: '2020-01-01T00:00:00.000Z',
+      locale: 'en',
+      refreshTokenRef: 'projects/enat/secrets/gmail-refresh-token-google-user-123/versions/7',
+    };
+    const { firestore } = fakeFirestore({ 'users/google-user-123': existing });
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    const user = await repository.findOrCreateByGoogleId(IDENTITY);
+
+    expect(user).toEqual({ ...existing, email: 'mom@example.com' });
   });
 
   it('rejects a stored document that does not match the user schema', async () => {

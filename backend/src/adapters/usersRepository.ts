@@ -27,6 +27,8 @@ export interface FirestoreDocumentLike {
   /** Must reject if a document already exists at this path — used to resolve the race
    * between two concurrent first-sign-in requests without a transaction. */
   create(data: Record<string, unknown>): Promise<unknown>;
+  /** Merges `data` into an existing document. */
+  update(data: Record<string, unknown>): Promise<unknown>;
 }
 
 export interface FirestoreSnapshotLike {
@@ -58,7 +60,7 @@ export function createFirestoreUsersRepository(
       const ref = users.doc(identity.googleUserId);
       const existing = await ref.get();
       if (existing.exists) {
-        return parseUserDocument(existing.data());
+        return reconcileEmail(ref, parseUserDocument(existing.data()), identity.email);
       }
 
       const user = newUserRecord(identity, now);
@@ -73,10 +75,27 @@ export function createFirestoreUsersRepository(
         }
         // Lost the race to a concurrent first sign-in; the winner's record is authoritative.
         const created = await ref.get();
-        return parseUserDocument(created.data());
+        return reconcileEmail(ref, parseUserDocument(created.data()), identity.email);
       }
     },
   };
+}
+
+/**
+ * The Google account's email can change; the verified token is the source of truth for it,
+ * not the document written at first sign-in. Only `email` is reconciled — `locale` and
+ * `createdAt` belong to us, and `refreshTokenRef` to the consent flow.
+ */
+async function reconcileEmail(
+  ref: FirestoreDocumentLike,
+  stored: User,
+  verifiedEmail: string,
+): Promise<User> {
+  if (stored.email === verifiedEmail) {
+    return stored;
+  }
+  await ref.update({ email: verifiedEmail });
+  return { ...stored, email: verifiedEmail };
 }
 
 function parseUserDocument(data: Record<string, unknown> | undefined): User {
