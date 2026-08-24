@@ -1,13 +1,33 @@
 import type { Server } from 'node:http';
+import { createFirestoreClient } from './adapters/firestoreClient.js';
+import { createGoogleIdTokenVerifier } from './adapters/idTokenVerifier.js';
+import { createFirestoreUsersRepository } from './adapters/usersRepository.js';
 import { createApp } from './app.js';
 import { loadConfig, type Config } from './config.js';
+import { createRateLimiter } from './domain/rateLimiter.js';
 import { createLogger, type Logger } from './logging/logger.js';
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 function main(): void {
   const config = loadConfigOrExit();
   const logger = createLogger({ level: config.logLevel });
 
-  const server = createApp({ config, logger }).listen(config.port, () => {
+  const app = createApp({
+    config,
+    logger,
+    // An empty audience list (possible only outside production, where the variable is
+    // optional) rejects every token — /v1/ fails closed rather than open until the local
+    // environment sets GOOGLE_OAUTH_AUDIENCE.
+    idTokenVerifier: createGoogleIdTokenVerifier({ audience: config.googleOAuthAudience ?? [] }),
+    usersRepository: createFirestoreUsersRepository(createFirestoreClient(config.gcpProjectId)),
+    rateLimiter: createRateLimiter({
+      limit: config.rateLimitPerMinute,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    }),
+  });
+
+  const server = app.listen(config.port, () => {
     logger.info('server listening', { port: config.port, environment: config.environment });
   });
 
