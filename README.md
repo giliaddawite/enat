@@ -61,7 +61,7 @@ nvm use   # reads .nvmrc
 
 ```bash
 cd backend
-npm install
+npm ci                 # reproducible install from the lockfile
 npm run dev            # starts the API on http://localhost:8080
 curl localhost:8080/healthz
 ```
@@ -96,7 +96,7 @@ TICKET-101 (backend) / TICKET-201 (Android).
 | Backend lint | `npm run lint` |
 | Backend type check | `npm run typecheck` |
 | Android debug build | `./gradlew assembleDebug` |
-| Android tests | `./gradlew test` |
+| Android tests | `./gradlew testDebugUnitTest` |
 | Android lint | `./gradlew ktlintCheck` |
 
 CI runs lint + unit tests + build check on every PR into `main`; a failing
