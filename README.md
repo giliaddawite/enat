@@ -1,9 +1,7 @@
 # Enat
 
-<!-- No git remote is configured yet — replace OWNER/fable-cooking below with
-     the real GitHub path once this repo is pushed (docs/ci-cd.md). -->
-[![PR](https://github.com/OWNER/fable-cooking/actions/workflows/pr.yml/badge.svg)](https://github.com/OWNER/fable-cooking/actions/workflows/pr.yml)
-[![Deploy](https://github.com/OWNER/fable-cooking/actions/workflows/deploy.yml/badge.svg)](https://github.com/OWNER/fable-cooking/actions/workflows/deploy.yml)
+[![PR](https://github.com/giliaddawite/enat/actions/workflows/pr.yml/badge.svg)](https://github.com/giliaddawite/enat/actions/workflows/pr.yml)
+[![Deploy](https://github.com/giliaddawite/enat/actions/workflows/deploy.yml/badge.svg)](https://github.com/giliaddawite/enat/actions/workflows/deploy.yml)
 
 An accessibility-first Android app that gives an Amharic-speaking parent a calm,
 readable view of their day: an LLM-generated digest of their Gmail inbox in
