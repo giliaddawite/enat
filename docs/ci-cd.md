@@ -45,9 +45,8 @@ project, service accounts, and IAM roles these secrets point at.
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | deploy-backend | Workload Identity Federation provider resource name — no long-lived service-account key is stored anywhere |
 | `GCP_DEPLOY_SERVICE_ACCOUNT` | deploy-backend | staging deploy service account email, minimal IAM (TICKET-003) |
 | `GCP_PROJECT_ID` | deploy-backend | staging GCP project ID |
-| `GCP_REGION` | deploy-backend | e.g. `us-central1` |
+| `GCP_REGION` | deploy-backend | `europe-west1` — must match the region conventions in `infra/` |
 | `ARTIFACT_REGISTRY_REPO` | deploy-backend | Artifact Registry repository name |
-| `CLOUD_RUN_SERVICE` | deploy-backend | Cloud Run service name |
 | `ANDROID_KEYSTORE_BASE64` | build-android-release | release keystore, base64-encoded |
 | `ANDROID_KEYSTORE_PASSWORD` | build-android-release | |
 | `ANDROID_KEY_ALIAS` | build-android-release | |
@@ -57,6 +56,13 @@ project, service accounts, and IAM roles these secrets point at.
 We use Workload Identity Federation instead of a downloaded service-account
 JSON key specifically so no GCP credential file ever needs to exist as a
 GitHub secret — reducing what "never appears in the repo" has to cover.
+
+There is no service-name secret: the deploy job renders
+`infra/cloudrun/service.staging.yaml` (substituting the digest-pinned image
+and the project id for its placeholders) and applies it with
+`gcloud run services replace`. That file — not workflow flags — is the source
+of truth for the service name, env vars, scaling limits, and cost-control
+annotations; see `infra/README.md`.
 
 ## Verifying "no credentials in tracked files"
 

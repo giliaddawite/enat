@@ -8,7 +8,7 @@ name: Deploy
 #
 # Required GitHub secrets (repo or environment scoped — see docs/ci-cd.md):
 #   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT, GCP_PROJECT_ID,
-#   GCP_REGION, ARTIFACT_REGISTRY_REPO, CLOUD_RUN_SERVICE
+#   GCP_REGION, ARTIFACT_REGISTRY_REPO
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
 #   ANDROID_KEY_PASSWORD
 # None of these have values in this repository — they're set in
@@ -87,12 +87,29 @@ jobs:
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
 
-      - name: deploy to Cloud Run staging
+      # The service definition in infra/ is the source of truth for runtime config:
+      # env vars (GCP_PROJECT_ID is required at boot in production), scaling limits,
+      # and the cost-control annotations. `gcloud run deploy --image` would create a
+      # service with none of them, so the YAML is rendered and applied instead. The
+      # image is pinned by digest so a rollback points at the exact bytes tested.
+      - name: resolve pushed image digest
+        id: digest
         env:
           IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.ARTIFACT_REGISTRY_REPO }}/backend
         run: |
-          gcloud run deploy "${{ secrets.CLOUD_RUN_SERVICE }}" \
-            --image "$IMAGE:${{ github.sha }}" \
+          echo "ref=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:${{ github.sha }}")" >> "$GITHUB_OUTPUT"
+
+      - name: render and apply Cloud Run service definition
+        working-directory: .
+        run: |
+          sed -e "s|IMAGE_PLACEHOLDER|${{ steps.digest.outputs.ref }}|" \
+              -e "s|PROJECT_ID_PLACEHOLDER|${{ secrets.GCP_PROJECT_ID }}|g" \
+              infra/cloudrun/service.staging.yaml > "$RUNNER_TEMP/service.staging.rendered.yaml"
+          if grep -q "_PLACEHOLDER" "$RUNNER_TEMP/service.staging.rendered.yaml"; then
+            echo "unsubstituted placeholder remains in rendered service definition" >&2
+            exit 1
+          fi
+          gcloud run services replace "$RUNNER_TEMP/service.staging.rendered.yaml" \
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region "${{ secrets.GCP_REGION }}" \
             --quiet
