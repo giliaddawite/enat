@@ -8,6 +8,16 @@ export interface Config {
   readonly logLevel: LogLevel;
   /** Absent outside production, where it is only used for Cloud Trace log correlation. */
   readonly gcpProjectId?: string;
+  /**
+   * OAuth client ID(s) an inbound Google ID token's `aud` claim must match — required in
+   * production, where it gates every authenticated request. Optional elsewhere so a bare
+   * checkout can still run `npm run dev` before auth is wired into any route. A comma
+   * separated list supports rotating in a new client ID (e.g. a Play Store release build)
+   * without a window where the old one is rejected.
+   */
+  readonly googleOAuthAudience?: readonly string[];
+  /** Requests per user per 60s window before `429`. Defaults to the ticket's 60 req/min. */
+  readonly rateLimitPerMinute: number;
 }
 
 /**
@@ -40,6 +50,7 @@ const INTEGER = /^\d+$/;
 const DEFAULT_PORT = 8080;
 const DEFAULT_ENVIRONMENT: Environment = 'development';
 const DEFAULT_LOG_LEVEL: LogLevel = 'info';
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
 
 /**
  * Builds the Config from a raw environment. Pure: the caller owns reading process.env
@@ -70,6 +81,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     );
   }
 
+  const googleOAuthAudience = parseAudience(env.GOOGLE_OAUTH_AUDIENCE, problems);
+  if (environment === 'production' && googleOAuthAudience === undefined) {
+    problems.push('GOOGLE_OAUTH_AUDIENCE is required when NODE_ENV=production');
+  }
+
+  const rateLimitPerMinute = parsePositiveInteger(
+    'RATE_LIMIT_PER_MINUTE',
+    env.RATE_LIMIT_PER_MINUTE,
+    DEFAULT_RATE_LIMIT_PER_MINUTE,
+    problems,
+  );
+
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
@@ -78,8 +101,46 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     port,
     environment,
     logLevel,
+    rateLimitPerMinute,
     ...(gcpProjectId ? { gcpProjectId } : {}),
+    ...(googleOAuthAudience ? { googleOAuthAudience } : {}),
   };
+}
+
+/** Comma separated so a client ID rotation can add the new value before removing the old. */
+function parseAudience(
+  raw: string | undefined,
+  problems: string[],
+): readonly string[] | undefined {
+  if (raw === undefined || raw.trim() === '') {
+    return undefined;
+  }
+  const audience = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  if (audience.length === 0) {
+    problems.push('GOOGLE_OAUTH_AUDIENCE must not be blank');
+    return undefined;
+  }
+  return audience;
+}
+
+function parsePositiveInteger(
+  name: string,
+  raw: string | undefined,
+  fallback: number,
+  problems: string[],
+): number {
+  if (raw === undefined || raw === '') {
+    return fallback;
+  }
+  const value = INTEGER.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isInteger(value) || value < 1) {
+    problems.push(`${name} must be a positive integer`);
+    return fallback;
+  }
+  return value;
 }
 
 function parsePort(raw: string | undefined, problems: string[]): number {
