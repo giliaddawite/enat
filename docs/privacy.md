@@ -37,18 +37,18 @@ the key":
    decrypt every existing secret version correctly because Cloud KMS keeps prior key
    versions available for decryption; no re-encryption of old secrets is required.
 2. **The refresh token value itself**, which is an application-level rotation independent of
-   the above. `RefreshTokenStore.put(uid, token)` always adds a **new secret version** rather
-   than overwriting the existing one (`src/adapters/refreshTokenStore.ts`). This happens
-   automatically whenever TICKET-202's consent flow runs again for a user — first sign-in,
-   or reconnecting after Google reports `invalid_grant` (revocation). The user's Firestore
-   `refreshTokenRef` is updated to point at the new version; the previous version keeps
-   working until explicitly retired.
-   - **Operational follow-up (not yet automated, tracked for TICKET-303):** destroy secret
-     versions older than the current one on a retention schedule (e.g. 30 days) via
-     `gcloud secrets versions destroy`, so a version reference that leaked from an old log or
-     backup stops being redeemable. Manual rotation today: list versions with
-     `gcloud secrets versions list gmail-refresh-token-<uid>` and destroy everything but the
-     version Firestore currently references.
+   the above. `RefreshTokenStore.put(uid, token)` adds a **new secret version** and then
+   **destroys every superseded enabled version** (`src/adapters/refreshTokenStore.ts`), so
+   an old plaintext token stops being redeemable — and billed — as soon as it is replaced.
+   This happens automatically whenever TICKET-202's consent flow runs again for a user —
+   first sign-in, or reconnecting after Google reports `invalid_grant` (revocation). The
+   user's Firestore `refreshTokenRef` is updated to point at the new version.
+   - Destruction failures are logged (`failed to destroy a superseded refresh token
+     version`) and tolerated — the new token is already stored, and the next `put` sweeps
+     up anything a failed cleanup left behind, because it destroys every enabled version
+     except the one it just wrote. If that warning appears repeatedly, retire versions
+     manually: `gcloud secrets versions list gmail-refresh-token-<uid>` and
+     `gcloud secrets versions destroy` everything but the version Firestore references.
 
 ## Everything else (summary; expand under TICKET-303)
 
