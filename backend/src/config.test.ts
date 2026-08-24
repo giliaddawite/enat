@@ -7,6 +7,7 @@ describe('loadConfig', () => {
       port: 8080,
       environment: 'development',
       logLevel: 'info',
+      rateLimitPerMinute: 60,
     });
   });
 
@@ -17,13 +18,38 @@ describe('loadConfig', () => {
         NODE_ENV: 'production',
         LOG_LEVEL: 'debug',
         GCP_PROJECT_ID: 'enat-staging',
+        GOOGLE_OAUTH_AUDIENCE: 'android-client-id.apps.googleusercontent.com',
+        RATE_LIMIT_PER_MINUTE: '30',
       }),
     ).toEqual({
       port: 3000,
       environment: 'production',
       logLevel: 'debug',
       gcpProjectId: 'enat-staging',
+      googleOAuthAudience: ['android-client-id.apps.googleusercontent.com'],
+      rateLimitPerMinute: 30,
     });
+  });
+
+  it('splits GOOGLE_OAUTH_AUDIENCE on commas to support rotating in a new client id', () => {
+    const config = loadConfig({
+      NODE_ENV: 'production',
+      GCP_PROJECT_ID: 'enat-staging',
+      GOOGLE_OAUTH_AUDIENCE: ' old-client-id , new-client-id ',
+    });
+
+    expect(config.googleOAuthAudience).toEqual(['old-client-id', 'new-client-id']);
+  });
+
+  it('requires GOOGLE_OAUTH_AUDIENCE in production', () => {
+    expect(() =>
+      loadConfig({ NODE_ENV: 'production', GCP_PROJECT_ID: 'enat-staging' }),
+    ).toThrow(/GOOGLE_OAUTH_AUDIENCE is required when NODE_ENV=production/);
+  });
+
+  it('rejects a RATE_LIMIT_PER_MINUTE that is not a positive integer', () => {
+    expect(() => loadConfig({ RATE_LIMIT_PER_MINUTE: '0' })).toThrow(ConfigError);
+    expect(() => loadConfig({ RATE_LIMIT_PER_MINUTE: 'sixty' })).toThrow(ConfigError);
   });
 
   it('rejects a PORT that is not a valid TCP port', () => {
