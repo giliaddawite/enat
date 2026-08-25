@@ -9,7 +9,7 @@ function fakeTokenEndpoint(
   const requests: { url: string; body: string }[] = [];
   const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
     requests.push({
-      url: String(input),
+      url: input instanceof Request ? input.url : String(input),
       body: typeof init?.body === 'string' ? init.body : '',
     });
     const responder = responses.shift();
@@ -105,7 +105,9 @@ describe('createGmailAccessTokenProvider', () => {
       now: () => 0,
     });
 
-    const error = await provider.getAccessToken(REF).catch((caught: unknown) => caught as Error);
+    const error = (await provider
+      .getAccessToken(REF)
+      .catch((caught: unknown) => caught)) as Error;
 
     expect(error.message).toContain('status 400');
     expect(error.message).not.toContain('refresh-token-secret');

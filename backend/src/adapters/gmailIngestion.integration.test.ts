@@ -52,14 +52,14 @@ function createFakeGmail(): FakeGmail {
   const sleeps: number[] = [];
   const failNext: number[] = [];
 
-  const internalDateOf = (id: string): string =>
+  const internalDateOf = (): string =>
     String(Date.UTC(2026, 7, 20) + historyEvents.length + messages.length);
 
   const metadataJson = (message: StoredMessage) => ({
     id: message.id,
     threadId: `thread-${message.id}`,
     snippet: `snippet for ${message.id}`,
-    internalDate: internalDateOf(message.id),
+    internalDate: internalDateOf(),
     labelIds: ['INBOX'],
     payload: {
       headers: [
@@ -122,7 +122,7 @@ function createFakeGmail(): FakeGmail {
   };
 
   const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
-    const url = new URL(String(input));
+    const url = new URL(input instanceof Request ? input.url : input);
 
     if (url.hostname === 'oauth2.googleapis.com') {
       tokenRequests.push(1);

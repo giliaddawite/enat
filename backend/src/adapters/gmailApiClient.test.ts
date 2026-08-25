@@ -17,7 +17,7 @@ function scriptedFetch(responders: ((request: RecordedRequest) => Response)[]) {
   const sleeps: number[] = [];
   const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
     const request: RecordedRequest = {
-      url: new URL(String(input)),
+      url: new URL(input instanceof Request ? input.url : input),
       method: init?.method ?? 'GET',
       headers: Object.fromEntries(
         Object.entries((init?.headers as Record<string, string> | undefined) ?? {}).map(
@@ -104,9 +104,9 @@ describe('getProfile', () => {
   it('rejects a response that fails schema validation, without echoing its content', async () => {
     const script = scriptedFetch([() => jsonResponse(200, { secretField: 'private-value' })]);
 
-    const error = await client(script)
+    const error = (await client(script)
       .getProfile()
-      .catch((caught: unknown) => caught as Error);
+      .catch((caught: unknown) => caught)) as Error;
 
     expect(error.message).toContain('schema validation');
     expect(error.message).not.toContain('private-value');

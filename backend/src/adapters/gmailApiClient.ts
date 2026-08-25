@@ -139,7 +139,7 @@ export function createGmailApiClient(options: GmailApiClientOptions): GmailMailb
             `Gmail API ${path} failed with status ${response.status}`,
           );
         }
-        return (await response.json()) as unknown;
+        return response.json();
       },
       isRetryable,
       policy,
