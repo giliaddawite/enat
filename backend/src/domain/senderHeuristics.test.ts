@@ -45,8 +45,18 @@ describe('categorizeByHeuristics', () => {
   });
 
   it('buckets billing machinery localparts under bills regardless of domain', () => {
-    const email = emailFrom('billing@some-clinic.example');
-    expect(categorizeByHeuristics(email)).toBe('bills_accounts');
+    expect(categorizeByHeuristics(emailFrom('billing@some-clinic.example'))).toBe(
+      'bills_accounts',
+    );
+    expect(categorizeByHeuristics(emailFrom('invoices-noreply@lab.example'))).toBe(
+      'bills_accounts',
+    );
+  });
+
+  it('does not let a keyword buried in the localpart claim the bills bucket', () => {
+    expect(categorizeByHeuristics(emailFrom('not-a-billing-scam@attacker.example'))).toBe(
+      'important',
+    );
   });
 
   it('buckets government senders under important', () => {

@@ -31,12 +31,12 @@ Input (`MAX_INPUT_TOKENS_PER_DIGEST = 12_000`, enforced by `planDigestBatch`):
 | Component                                        |       Tokens |
 | ------------------------------------------------ | -----------: |
 | Prompt overhead (system + instructions + date)   |          700 |
-| Per email: envelope + From/Subject/Received      |          ~45 |
-| Per email: body slice (`BODY_TOKENS_PER_EMAIL`)  |          180 |
+| Per email: envelope + From/Subject/Received      |          ~55 |
+| Per email: body slice (`BODY_TOKENS_PER_EMAIL`)  |          170 |
 | **50 emails: 700 + 50 × 225**                    |  **11,950**  |
 
 Output (`OUTPUT_OVERHEAD_TOKENS + 50 × OUTPUT_TOKENS_PER_EMAIL = 200 + 6,000 = 6,200`,
-enforced as the API `max_tokens`):
+clamped to `MAX_OUTPUT_TOKENS_PER_DIGEST = 6_200` and enforced as the API `max_tokens`):
 
 ```
 input   12,000 × $1.00 / 1M  = $0.0120
@@ -52,9 +52,12 @@ measured fixture prompt to 50 emails and fails if it ever exceeds the cap.
 
 ## Why the typical day costs less
 
-- **Caching:** results are cached in Firestore by message id; an email is summarized at
-  most once, ever. Re-runs of a digest (idempotent scheduler retries, on-demand refresh)
-  hit the cache and cost $0.
+- **Caching:** results are cached in Firestore, keyed by user, prompt version and
+  message id; an email is summarized at most once per prompt version. Re-runs of a
+  digest (idempotent scheduler retries, on-demand refresh) hit the cache and cost $0.
+  The flip side is deliberate: bumping `PROMPT_VERSION` re-summarizes mail that
+  reappears in a digest — a one-day blip bounded by the daily cap above, and the price
+  of a prompt fix actually reaching already-summarized email.
 - **Real bodies are short:** 180 tokens is a per-email ceiling; snippets and short mails
   use far less, and unfetched bodies fall back to snippets.
 - **Overflow degrades free:** emails beyond the input cap get category-only treatment

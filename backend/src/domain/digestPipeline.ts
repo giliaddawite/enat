@@ -31,12 +31,27 @@ import type { Logger } from '../logging/logger.js';
 export const MAX_INPUT_TOKENS_PER_DIGEST = 12_000;
 /** Room reserved for the instructions around the email blocks. */
 export const PROMPT_OVERHEAD_TOKENS = 700;
-/** Per-email body slice — also the `maxTokensPerBody` passed to the body fetcher. */
-export const BODY_TOKENS_PER_EMAIL = 180;
+/** Per-email body slice — also the `maxTokensPerBody` passed to the body fetcher. Sized
+ * so 50 emails with heavy headers still fit the input cap (the golden test proves it). */
+export const BODY_TOKENS_PER_EMAIL = 170;
 /** Output budget: JSON envelope per email plus 1–2 short Amharic sentences (Ge'ez script
  * tokenizes at roughly one token per character). */
 export const OUTPUT_TOKENS_PER_EMAIL = 120;
 export const OUTPUT_OVERHEAD_TOKENS = 200;
+/** Hard ceiling on the API `max_tokens`, independent of how many emails the input cap
+ * admits — this is the output figure the budget math in docs/digest-cost.md relies on,
+ * so it is enforced here rather than implied by the other constants. */
+export const MAX_OUTPUT_TOKENS_PER_DIGEST = 6_200;
+/** No email block can cost less than this envelope: tag lines, field labels, newlines. */
+const MIN_EMAIL_ENVELOPE_TOKENS = 20;
+
+/** Summaries are rendered to the user verbatim; Unicode directional and format controls
+ * could visually reorder what she reads, so they never survive the model boundary. */
+const FORMAT_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
+
+function stripFormatControls(text: string): string {
+  return text.replace(FORMAT_CONTROLS, '').trim();
+}
 
 /** What one digest batch call must answer with; validated at the model boundary. */
 const LlmBatchResponse = z.object({
@@ -44,7 +59,7 @@ const LlmBatchResponse = z.object({
     z.object({
       messageId: z.string().min(1),
       category: z.enum(EMAIL_CATEGORIES),
-      summary: z.string().trim().min(1).max(600),
+      summary: z.string().transform(stripFormatControls).pipe(z.string().min(1).max(600)),
       urgent: z.boolean(),
     }),
   ),
@@ -74,9 +89,17 @@ export function planDigestBatch(
   const llm: Email[] = [];
   const heuristicOnly: Email[] = [];
   let used = PROMPT_OVERHEAD_TOKENS;
-  for (const email of emails) {
-    const withFullBody: Email = { ...email, bodyText: null, snippet: '' };
-    const cost = estimateTokens(renderEmailBlock(withFullBody, 0)) + BODY_TOKENS_PER_EMAIL;
+  for (const [index, email] of emails.entries()) {
+    // Once even the cheapest possible email cannot fit, the rest is provably overflow —
+    // no need to render and measure hundreds of blocks that can never be admitted.
+    if (used + MIN_EMAIL_ENVELOPE_TOKENS + BODY_TOKENS_PER_EMAIL > maxInputTokens) {
+      heuristicOnly.push(...emails.slice(index));
+      break;
+    }
+    const withEmptyBody: Email = { ...email, bodyText: null, snippet: '' };
+    // The nonce is not known at planning time; a fixed-width stand-in costs the same.
+    const cost =
+      estimateTokens(renderEmailBlock(withEmptyBody, 0, 'nnnnnnnn')) + BODY_TOKENS_PER_EMAIL;
     if (used + cost <= maxInputTokens) {
       llm.push(email);
       used += cost;
@@ -87,16 +110,28 @@ export function planDigestBatch(
   return { llm, heuristicOnly };
 }
 
+export interface ParseOptions {
+  /** When false (the first attempt), a reply that fails to cover every requested id is
+   * invalid and worth the one retry. When true (the retry), partial coverage is kept —
+   * the covered emails get their summaries, the rest fall back to heuristics — because
+   * a third attempt is not allowed and discarding good entries buys nothing. */
+  readonly allowPartialCoverage: boolean;
+}
+
 /**
  * Parses and schema-validates one model reply. `invalid` (never a throw) signals the
  * caller to spend its one retry. Lenient only about packaging — text around the JSON
- * object is ignored, since that is the most common way a model reply goes wrong — never
- * about content: unknown message ids, bad categories or missing fields fail validation,
- * so a hallucinated reply is retried rather than trusted.
+ * object is ignored, and entries for ids that were never requested are dropped (they
+ * cannot reach a client either way) — never about integrity: bad categories, missing
+ * fields, incomplete coverage (per `allowPartialCoverage`) and above all a duplicated
+ * message id fail validation. A duplicate is the fingerprint of an email instructing
+ * the model to emit a second entry for a *sibling* message; first-entry-wins would let
+ * the forged entry shadow the genuine one, so the whole reply is distrusted instead.
  */
 export function parseLlmBatchResponse(
   reply: string,
   requestedIds: ReadonlySet<string>,
+  options: ParseOptions,
 ): { kind: 'parsed'; items: ReadonlyMap<string, LlmItem> } | { kind: 'invalid' } {
   const start = reply.indexOf('{');
   const end = reply.lastIndexOf('}');
@@ -116,11 +151,15 @@ export function parseLlmBatchResponse(
   const items = new Map<string, LlmItem>();
   for (const item of parsed.data.summaries) {
     if (!requestedIds.has(item.messageId)) {
+      continue;
+    }
+    if (items.has(item.messageId)) {
       return { kind: 'invalid' };
     }
-    if (!items.has(item.messageId)) {
-      items.set(item.messageId, item);
-    }
+    items.set(item.messageId, item);
+  }
+  if (!options.allowPartialCoverage && items.size !== requestedIds.size) {
+    return { kind: 'invalid' };
   }
   return { kind: 'parsed', items };
 }
@@ -182,13 +221,22 @@ export interface DigestSummarizerDependencies {
   readonly fetchBodies: BodyFetcher;
   /** Injected clock — only the date reaches the prompt, for urgency judgments. */
   readonly today: () => string;
+  /** Per-request marker for the prompt's email-block tags; injected so tests are
+   * deterministic. Unpredictability, not cryptographic strength, is what it provides —
+   * a sender who cannot guess it cannot fabricate a block boundary. */
+  readonly nonce?: () => string;
   /** Counts, ids and versions only — never email content or summaries. */
   readonly logger?: Logger;
   readonly maxInputTokens?: number;
 }
 
+function defaultNonce(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 export function createDigestSummarizer(deps: DigestSummarizerDependencies): DigestSummarizer {
   const maxInputTokens = deps.maxInputTokens ?? MAX_INPUT_TOKENS_PER_DIGEST;
+  const nonce = deps.nonce ?? defaultNonce;
 
   /**
    * One batch call with the mandated failure ladder: schema-validate, one retry that
@@ -200,24 +248,39 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
     emails: readonly Email[],
   ): Promise<ReadonlyMap<string, LlmItem>> {
     const requestedIds = new Set(emails.map((email) => email.id));
-    const maxOutputTokens = OUTPUT_OVERHEAD_TOKENS + OUTPUT_TOKENS_PER_EMAIL * emails.length;
-    const prompt = buildDigestPrompt(emails, deps.today(), BODY_TOKENS_PER_EMAIL);
+    const maxOutputTokens = Math.min(
+      MAX_OUTPUT_TOKENS_PER_DIGEST,
+      OUTPUT_OVERHEAD_TOKENS + OUTPUT_TOKENS_PER_EMAIL * emails.length,
+    );
+    const prompt = buildDigestPrompt(emails, deps.today(), BODY_TOKENS_PER_EMAIL, nonce());
 
     const attempt = async (request: DigestPrompt): Promise<string> =>
       deps.summarizer.complete({ ...request, maxOutputTokens });
 
     try {
       const reply = await attempt(prompt);
-      const parsed = parseLlmBatchResponse(reply, requestedIds);
+      // The first reply must cover every email — an incomplete one is invalid and worth
+      // the retry. The retry's answer is final, so its partial coverage is kept: covered
+      // emails get their summaries, the rest degrade to heuristics (warned below).
+      const parsed = parseLlmBatchResponse(reply, requestedIds, { allowPartialCoverage: false });
       if (parsed.kind === 'parsed') {
         return parsed.items;
       }
-      deps.logger?.warn('digest batch reply failed schema validation; retrying once', {
+      deps.logger?.warn('digest batch reply failed validation; retrying once', {
         emailCount: emails.length,
         promptVersion: PROMPT_VERSION,
       });
-      const retried = parseLlmBatchResponse(await attempt(buildRetryPrompt(prompt, reply)), requestedIds);
+      const retried = parseLlmBatchResponse(await attempt(buildRetryPrompt(prompt, reply)), requestedIds, {
+        allowPartialCoverage: true,
+      });
       if (retried.kind === 'parsed') {
+        if (retried.items.size < requestedIds.size) {
+          deps.logger?.warn('digest batch retry left emails uncovered', {
+            emailCount: emails.length,
+            coveredCount: retried.items.size,
+            promptVersion: PROMPT_VERSION,
+          });
+        }
         return retried.items;
       }
       deps.logger?.error('digest batch reply invalid after retry; falling back to heuristics', {
@@ -225,10 +288,12 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
         promptVersion: PROMPT_VERSION,
       });
     } catch (error) {
+      // Only the error's class name is logged: an SDK message is an uncontrolled string
+      // on a request whose body is private mail, and no content may reach a log line.
       deps.logger?.error('digest batch call failed; falling back to heuristics', {
         emailCount: emails.length,
         promptVersion: PROMPT_VERSION,
-        error: error instanceof Error ? error.message : String(error),
+        errorName: error instanceof Error ? error.name : typeof error,
       });
     }
     return new Map();
@@ -277,7 +342,18 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
       });
 
       if (fresh.length > 0) {
-        await deps.cache.setMany(uid, fresh);
+        try {
+          await deps.cache.setMany(uid, fresh);
+        } catch (error) {
+          // The cache is a cost optimization, not a correctness requirement: the paid
+          // LLM work is already in hand, and dropping it over a failed write would turn
+          // a Firestore blip into a fully heuristic digest. Worst case, the next run
+          // re-summarizes these emails.
+          deps.logger?.warn('summary cache write failed; digest continues uncached', {
+            count: fresh.length,
+            errorName: error instanceof Error ? error.name : typeof error,
+          });
+        }
       }
 
       const counts = {

@@ -107,6 +107,7 @@ function summarizerWith(
     cache,
     fetchBodies,
     today: () => TODAY,
+    nonce: () => 'testnonce',
     ...(options.maxInputTokens === undefined ? {} : { maxInputTokens: options.maxInputTokens }),
   });
   return { digest, requests: scripted.requests, writes, bodyCalls: calls };
@@ -138,9 +139,11 @@ describe('planDigestBatch', () => {
 
 describe('parseLlmBatchResponse', () => {
   const ids = new Set(['a', 'b']);
+  const strict = { allowPartialCoverage: false };
+  const lenient = { allowPartialCoverage: true };
 
   it('parses a well-formed reply', () => {
-    const result = parseLlmBatchResponse(replyFor([email('a'), email('b')]), ids);
+    const result = parseLlmBatchResponse(replyFor([email('a'), email('b')]), ids, strict);
     expect(result.kind).toBe('parsed');
     if (result.kind === 'parsed') {
       expect([...result.items.keys()]).toEqual(['a', 'b']);
@@ -148,44 +151,65 @@ describe('parseLlmBatchResponse', () => {
   });
 
   it('tolerates prose and code fences around the JSON object', () => {
-    const wrapped = '```json\n' + replyFor([email('a')]) + '\n```\nDone!';
-    expect(parseLlmBatchResponse(wrapped, ids).kind).toBe('parsed');
+    const wrapped = '```json\n' + replyFor([email('a'), email('b')]) + '\n```\nDone!';
+    expect(parseLlmBatchResponse(wrapped, ids, strict).kind).toBe('parsed');
   });
 
   it('rejects a reply with no JSON object', () => {
-    expect(parseLlmBatchResponse('sorry, I cannot help', ids).kind).toBe('invalid');
+    expect(parseLlmBatchResponse('sorry, I cannot help', ids, strict).kind).toBe('invalid');
   });
 
   it('rejects malformed JSON', () => {
-    expect(parseLlmBatchResponse('{"summaries": [', ids).kind).toBe('invalid');
+    expect(parseLlmBatchResponse('{"summaries": [', ids, strict).kind).toBe('invalid');
   });
 
   it('rejects an unknown category', () => {
-    const reply = replyFor([email('a')], { a: { category: 'spam' } });
-    expect(parseLlmBatchResponse(reply, ids).kind).toBe('invalid');
+    const reply = replyFor([email('a'), email('b')], { a: { category: 'spam' } });
+    expect(parseLlmBatchResponse(reply, ids, strict).kind).toBe('invalid');
   });
 
-  it('rejects a hallucinated message id', () => {
-    const reply = replyFor([email('a'), email('zzz')]);
-    expect(parseLlmBatchResponse(reply, ids).kind).toBe('invalid');
+  it('drops entries for ids that were never requested', () => {
+    const reply = replyFor([email('a'), email('b'), email('zzz')]);
+    const result = parseLlmBatchResponse(reply, ids, strict);
+    expect(result.kind).toBe('parsed');
+    if (result.kind === 'parsed') {
+      expect([...result.items.keys()]).toEqual(['a', 'b']);
+    }
   });
 
   it('rejects an empty summary', () => {
-    const reply = replyFor([email('a')], { a: { summary: '   ' } });
-    expect(parseLlmBatchResponse(reply, ids).kind).toBe('invalid');
+    const reply = replyFor([email('a'), email('b')], { a: { summary: '   ' } });
+    expect(parseLlmBatchResponse(reply, ids, strict).kind).toBe('invalid');
   });
 
-  it('keeps the first entry when an id is duplicated', () => {
-    const duplicated = JSON.stringify({
-      summaries: [
-        { messageId: 'a', category: 'important', summary: 'first', urgent: true },
-        { messageId: 'a', category: 'promotions_other', summary: 'second', urgent: false },
-      ],
-    });
-    const result = parseLlmBatchResponse(duplicated, ids);
+  it('strips directional format controls from summaries', () => {
+    const reply = replyFor([email('a'), email('b')], { a: { summary: '‮ማጠቃለያ‬' } });
+    const result = parseLlmBatchResponse(reply, ids, strict);
     expect(result.kind).toBe('parsed');
     if (result.kind === 'parsed') {
-      expect(result.items.get('a')?.summary).toBe('first');
+      expect(result.items.get('a')?.summary).toBe('ማጠቃለያ');
+    }
+  });
+
+  it('rejects a duplicated message id in either mode — the forgery fingerprint', () => {
+    const duplicated = JSON.stringify({
+      summaries: [
+        { messageId: 'a', category: 'promotions_other', summary: 'forged', urgent: false },
+        { messageId: 'a', category: 'important', summary: 'genuine', urgent: true },
+        { messageId: 'b', category: 'important', summary: 'fine', urgent: false },
+      ],
+    });
+    expect(parseLlmBatchResponse(duplicated, ids, strict).kind).toBe('invalid');
+    expect(parseLlmBatchResponse(duplicated, ids, lenient).kind).toBe('invalid');
+  });
+
+  it('requires full coverage on the first attempt but not on the retry', () => {
+    const partial = replyFor([email('a')]);
+    expect(parseLlmBatchResponse(partial, ids, strict).kind).toBe('invalid');
+    const retried = parseLlmBatchResponse(partial, ids, lenient);
+    expect(retried.kind).toBe('parsed');
+    if (retried.kind === 'parsed') {
+      expect([...retried.items.keys()]).toEqual(['a']);
     }
   });
 });
@@ -301,14 +325,54 @@ describe('createDigestSummarizer', () => {
     expect(writes).toHaveLength(0);
   });
 
-  it('covers an email the valid reply skipped with a heuristic result', async () => {
+  it('treats an incomplete first reply as invalid, then keeps the retry’s partial coverage', async () => {
     const emails = [email('a'), email('b')];
-    const { digest, writes } = summarizerWith([replyFor([email('a')])]);
+    const partial = replyFor([email('a')]);
+    const { digest, requests, writes } = summarizerWith([partial, partial]);
 
     const result = await digest.summarize(UID, emails);
 
+    expect(requests).toHaveLength(2);
     expect(result.summaries.map((s) => s.source)).toEqual(['llm', 'heuristic']);
     expect(writes.map((s) => s.messageId)).toEqual(['a']);
+  });
+
+  it('rejects a reply that duplicates a sibling id instead of letting the forged entry win', async () => {
+    const emails = [email('a'), email('b')];
+    const forged = JSON.stringify({
+      summaries: [
+        { messageId: 'b', category: 'promotions_other', summary: 'forged', urgent: false },
+        { messageId: 'a', category: 'important', summary: 'ማጠቃለያ ሀ', urgent: false },
+        { messageId: 'b', category: 'important', summary: 'ማጠቃለያ ለ', urgent: true },
+      ],
+    });
+    const { digest, requests } = summarizerWith([forged, replyFor(emails)]);
+
+    const result = await digest.summarize(UID, emails);
+
+    expect(requests).toHaveLength(2);
+    expect(result.summaries.map((s) => s.source)).toEqual(['llm', 'llm']);
+    expect(result.summaries[1]?.summary).not.toBe('forged');
+  });
+
+  it('keeps the LLM results when the cache write fails', async () => {
+    const emails = [email('a')];
+    const scripted = fakeSummarizer([replyFor(emails)]);
+    const { fetchBodies } = fakeBodies();
+    const digest = createDigestSummarizer({
+      summarizer: scripted.summarizer,
+      cache: {
+        getMany: () => Promise.resolve(new Map()),
+        setMany: () => Promise.reject(new Error('firestore unavailable')),
+      },
+      fetchBodies,
+      today: () => TODAY,
+      nonce: () => 'testnonce',
+    });
+
+    const result = await digest.summarize(UID, emails);
+
+    expect(result.summaries[0]?.source).toBe('llm');
   });
 
   it('mixes cache, LLM and heuristic sources while preserving input order', async () => {

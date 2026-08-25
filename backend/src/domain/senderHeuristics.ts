@@ -51,14 +51,18 @@ const BILLS_DOMAINS: readonly string[] = [
   'irs.gov',
 ];
 
-/** Localparts that mark billing machinery regardless of domain (billing@, invoice@ …). */
-const BILLS_LOCALPART_KEYWORDS: readonly string[] = [
+/** Localparts that mark billing machinery regardless of domain (billing@, invoice@ …).
+ * Matched against the localpart's leading token only — a substring match would let any
+ * sender self-classify into Bills by tucking a keyword into its address. */
+const BILLS_LOCALPART_KEYWORDS = new Set([
   'billing',
   'invoice',
+  'invoices',
   'statement',
+  'statements',
   'payment',
   'payments',
-];
+]);
 
 /** Consumer mail providers: a person, not an organization, wrote this. */
 const FREEMAIL_DOMAINS = new Set([
@@ -114,9 +118,10 @@ export function categorizeByHeuristics(email: Email): EmailCategory {
   const domain = domainOf(address);
   const localpart = localpartOf(address);
 
+  const leadingToken = localpart.split(/[._+-]/, 1)[0] ?? '';
   if (
     BILLS_DOMAINS.some((suffix) => matchesDomain(domain, suffix)) ||
-    BILLS_LOCALPART_KEYWORDS.some((keyword) => localpart.includes(keyword))
+    BILLS_LOCALPART_KEYWORDS.has(leadingToken)
   ) {
     return 'bills_accounts';
   }

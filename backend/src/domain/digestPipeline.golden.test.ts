@@ -4,6 +4,7 @@ import {
   BODY_TOKENS_PER_EMAIL,
   createDigestSummarizer,
   MAX_INPUT_TOKENS_PER_DIGEST,
+  MAX_OUTPUT_TOKENS_PER_DIGEST,
   PROMPT_OVERHEAD_TOKENS,
   type SummarizerPort,
   type SummaryCacheStore,
@@ -11,6 +12,7 @@ import {
 import type { Email } from './email.js';
 import { estimateTokens } from './emailText.js';
 import { categorizeByHeuristics } from './senderHeuristics.js';
+import { renderEmailBlock } from './summarizationPrompt.js';
 import type { EmailSummary } from './summary.js';
 
 /**
@@ -53,6 +55,7 @@ function goldenSummarizer() {
     fetchBodies: (ids) =>
       Promise.resolve(new Map(ids.map((id) => [id, bodies[id] ?? '']))),
     today: () => TODAY,
+    nonce: () => 'goldnonce',
   });
   return { digest, requests };
 }
@@ -77,19 +80,34 @@ describe('digest pipeline goldens', () => {
     );
   });
 
-  it('stays within the input-token cap with margin for a 50-email day', async () => {
+  it('admits a 50-email day under the input cap, as the planner costs emails', () => {
+    // The planner's own per-email estimate for the heaviest fixture: envelope without a
+    // body, plus the full per-email body budget — exactly what planDigestBatch charges.
+    const heaviest = Math.max(
+      ...emails.map(
+        (email) =>
+          estimateTokens(renderEmailBlock({ ...email, bodyText: null, snippet: '' }, 0, 'nnnnnnnn')) +
+          BODY_TOKENS_PER_EMAIL,
+      ),
+    );
+    // The cost math in docs/digest-cost.md assumes 50 typical emails fit under the cap.
+    expect(PROMPT_OVERHEAD_TOKENS + 50 * heaviest).toBeLessThanOrEqual(
+      MAX_INPUT_TOKENS_PER_DIGEST,
+    );
+  });
+
+  it('keeps the worst-case digest at or under the $0.05 budget on Haiku pricing', async () => {
     const { requests, digest } = goldenSummarizer();
     await digest.summarize('golden-user', emails);
     const request = requests[0];
     if (request === undefined) {
       throw new Error('no request recorded');
     }
-    const promptTokens = estimateTokens(request.system) + estimateTokens(request.user);
-    const perEmail = (promptTokens - PROMPT_OVERHEAD_TOKENS) / emails.length + BODY_TOKENS_PER_EMAIL;
-    // The cost math in docs/digest-cost.md assumes 50 emails fit under the cap.
-    expect(PROMPT_OVERHEAD_TOKENS + 50 * perEmail).toBeLessThanOrEqual(
-      MAX_INPUT_TOKENS_PER_DIGEST,
-    );
+    expect(request.maxOutputTokens).toBeLessThanOrEqual(MAX_OUTPUT_TOKENS_PER_DIGEST);
+    // claude-haiku-4-5: $1/MTok in, $5/MTok out — the model documented in docs/digest-cost.md.
+    const worstCaseDollars =
+      (MAX_INPUT_TOKENS_PER_DIGEST * 1 + MAX_OUTPUT_TOKENS_PER_DIGEST * 5) / 1_000_000;
+    expect(worstCaseDollars).toBeLessThanOrEqual(0.05);
   });
 
   it('assigns the expected category to every fixture even on the heuristic-only path', () => {
