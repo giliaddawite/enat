@@ -16,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "@google-cloud/firestore": "^9.0.0",
     "@google-cloud/secret-manager": "^7.0.0",
     "express": "^5.1.0",
