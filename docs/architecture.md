@@ -1,4 +1,4 @@
-# Enat — system architecture
+# Enat - system architecture
 
 How a Gmail inbox becomes a calm Amharic digest on an accessible home screen.
 This describes the target architecture the ticket backlog builds toward; each
