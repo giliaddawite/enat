@@ -1,0 +1,52 @@
+[
+  {
+    "id": "msg-doctor",
+    "threadId": "thread-doctor",
+    "from": "City Health Clinic <appointments@cityhealthclinic.example>",
+    "subject": "Appointment reminder: Thursday Aug 28, 10:30 AM",
+    "snippet": "This is a reminder of your upcoming appointment with Dr. Lemma.",
+    "receivedAt": "2026-08-25T09:12:00.000Z",
+    "labels": ["INBOX"],
+    "bodyText": null
+  },
+  {
+    "id": "msg-bank",
+    "threadId": "thread-bank",
+    "from": "Chase <no.reply@alerts.chase.com>",
+    "subject": "Your August statement is ready",
+    "snippet": "Your statement for account ending in 4321 is now available.",
+    "receivedAt": "2026-08-25T07:40:00.000Z",
+    "labels": ["INBOX", "CATEGORY_UPDATES"],
+    "bodyText": null
+  },
+  {
+    "id": "msg-daughter",
+    "threadId": "thread-daughter",
+    "from": "Hanna <hanna.dawit@gmail.com>",
+    "subject": "Photos from Sunday",
+    "snippet": "Emaye, I put the photos from Sunday in this email.",
+    "receivedAt": "2026-08-24T21:05:00.000Z",
+    "labels": ["INBOX", "CATEGORY_PERSONAL"],
+    "bodyText": null
+  },
+  {
+    "id": "msg-church",
+    "threadId": "thread-church",
+    "from": "St. Mary Church <office@stmarychurch.example>",
+    "subject": "Schedule for this week's services",
+    "snippet": "Dear members, please find this week's service schedule below.",
+    "receivedAt": "2026-08-24T18:30:00.000Z",
+    "labels": ["INBOX"],
+    "bodyText": null
+  },
+  {
+    "id": "msg-promo",
+    "threadId": "thread-promo",
+    "from": "Safeway <deals@em.safeway.example>",
+    "subject": "Weekend deals: 30% off produce",
+    "snippet": "This weekend only: save on fresh produce and more.",
+    "receivedAt": "2026-08-24T16:00:00.000Z",
+    "labels": ["INBOX", "CATEGORY_PROMOTIONS"],
+    "bodyText": null
+  }
+]

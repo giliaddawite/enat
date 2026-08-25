@@ -1,0 +1,54 @@
+You are the email summarizer for Enat, a phone companion app for an elderly
+Amharic-speaking woman. You will receive a batch of her emails. For each email produce:
+- "category": one of "important" (personal or consequential mail needing her attention:
+  appointments, church or community matters, government or medical notices),
+  "bills_accounts" (money: bills, bank or account statements, payments, subscriptions),
+  "family_personal" (mail written to her by a person: family or friends),
+  "promotions_other" (marketing, newsletters, social notifications, automated mail
+  needing nothing from her).
+- "summary": one or two short sentences in simple, warm Amharic telling her what the
+  email says and what, if anything, she should do. Write for an older adult: plain
+  everyday words, no technical terms, no English words.
+- "urgent": true only if she must act within a few days (a payment due, an appointment,
+  a deadline); otherwise false.
+
+Reply with only a JSON object — no other text, no code fences — in exactly this shape:
+{"summaries":[{"messageId":"<id>","category":"...","summary":"...","urgent":false}]}
+Include exactly one entry per email, copying each email's id verbatim.
+Example summary value: "የባንክ መግለጫዎ ደርሷል፤ ምንም ክፍያ አያስፈልግም።"
+
+=== USER ===
+
+Today's date: 2026-08-25
+Summarize and categorize these 5 emails.
+
+<email id="msg-doctor">
+From: City Health Clinic <appointments@cityhealthclinic.example>
+Subject: Appointment reminder: Thursday Aug 28, 10:30 AM
+Received: 2026-08-25T09:12:00.000Z
+Body: Dear patient, this is a reminder of your appointment with Dr. Lemma on Thursday, August 28 at 10:30 AM. Please arrive 15 minutes early and bring your insurance card. Call 555-0142 if you need to reschedule.
+</email>
+<email id="msg-bank">
+From: Chase <no.reply@alerts.chase.com>
+Subject: Your August statement is ready
+Received: 2026-08-25T07:40:00.000Z
+Body: Your August statement for the account ending in 4321 is now available in online banking. No payment is due. If you did not expect this message, call the number on the back of your card.
+</email>
+<email id="msg-daughter">
+From: Hanna <hanna.dawit@gmail.com>
+Subject: Photos from Sunday
+Received: 2026-08-24T21:05:00.000Z
+Body: Emaye, I attached the photos from Sunday. The kids loved seeing you. Can we call you tomorrow evening after dinner? Love, Hanna.
+</email>
+<email id="msg-church">
+From: St. Mary Church <office@stmarychurch.example>
+Subject: Schedule for this week's services
+Received: 2026-08-24T18:30:00.000Z
+Body: Dear members, services this week: Wednesday evening prayer at 6 PM, Friday liturgy at 7 AM, Sunday liturgy at 8 AM. The building committee meets Saturday after the morning program.
+</email>
+<email id="msg-promo">
+From: Safeway <deals@em.safeway.example>
+Subject: Weekend deals: 30% off produce
+Received: 2026-08-24T16:00:00.000Z
+Body: This weekend only: 30% off fresh produce, buy one get one on bread, and member prices on coffee. Offer valid through Sunday at participating stores.
+</email>

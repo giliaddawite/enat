@@ -1,0 +1,34 @@
+{
+  "summaries": [
+    {
+      "messageId": "msg-doctor",
+      "category": "important",
+      "summary": "ሐሙስ ነሐሴ 28 ከጠዋቱ 10:30 ላይ ከዶክተር ለማ ጋር ቀጠሮ አለዎት። እባክዎ 15 ደቂቃ ቀደም ብለው ይድረሱ እና የኢንሹራንስ ካርድዎን ይዘው ይሂዱ።",
+      "urgent": true
+    },
+    {
+      "messageId": "msg-bank",
+      "category": "bills_accounts",
+      "summary": "የነሐሴ ወር የባንክ መግለጫዎ ደርሷል። ምንም የሚከፈል ክፍያ የለም።",
+      "urgent": false
+    },
+    {
+      "messageId": "msg-daughter",
+      "category": "family_personal",
+      "summary": "ሐና የእሁድ ፎቶዎችን ልካልዎታለች። ነገ ማታ ከእራት በኋላ ሊደውሉልዎት ይፈልጋሉ።",
+      "urgent": false
+    },
+    {
+      "messageId": "msg-church",
+      "category": "important",
+      "summary": "የቅድስት ማርያም ቤተ ክርስቲያን የዚህን ሳምንት የአገልግሎት መርሐ ግብር ልኳል። እሁድ ቅዳሴ ከጠዋቱ 8 ሰዓት ላይ ነው።",
+      "urgent": false
+    },
+    {
+      "messageId": "msg-promo",
+      "category": "promotions_other",
+      "summary": "የሱቅ ማስታወቂያ ነው። ምንም ማድረግ አያስፈልግዎትም።",
+      "urgent": false
+    }
+  ]
+}
