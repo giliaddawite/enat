@@ -26,8 +26,12 @@ function messageResponse(text: string, overrides: Record<string, unknown> = {}):
 function fakeFetch(responses: readonly Response[]) {
   const requests: RecordedRequest[] = [];
   const impl: typeof fetch = async (input, init) => {
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-    requests.push({ url: String(input), body });
+    if (typeof init?.body !== 'string') {
+      throw new Error('expected the SDK to send a string body');
+    }
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    requests.push({ url, body });
     const response = responses[requests.length - 1];
     if (response === undefined) {
       throw new Error(`test misconfiguration: no scripted response ${requests.length}`);
