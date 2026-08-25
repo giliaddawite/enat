@@ -355,6 +355,27 @@ describe('createDigestSummarizer', () => {
     expect(result.summaries[1]?.summary).not.toBe('forged');
   });
 
+  it('treats every email as uncached when the cache read fails', async () => {
+    const emails = [email('a')];
+    const scripted = fakeSummarizer([replyFor(emails)]);
+    const { fetchBodies } = fakeBodies();
+    const digest = createDigestSummarizer({
+      summarizer: scripted.summarizer,
+      cache: {
+        getMany: () => Promise.reject(new Error('firestore unavailable')),
+        setMany: () => Promise.resolve(),
+      },
+      fetchBodies,
+      today: () => TODAY,
+      nonce: () => 'testnonce',
+    });
+
+    const result = await digest.summarize(UID, emails);
+
+    expect(result.summaries[0]?.source).toBe('llm');
+    expect(result.counts).toEqual({ fromCache: 0, fromLlm: 1, heuristicOnly: 0 });
+  });
+
   it('keeps the LLM results when the cache write fails', async () => {
     const emails = [email('a')];
     const scripted = fakeSummarizer([replyFor(emails)]);

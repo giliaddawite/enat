@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { Email } from './email.js';
 import { estimateTokens } from './emailText.js';
@@ -46,10 +47,11 @@ export const MAX_OUTPUT_TOKENS_PER_DIGEST = 6_200;
 const MIN_EMAIL_ENVELOPE_TOKENS = 20;
 
 /** Summaries are rendered to the user verbatim; Unicode directional and format controls
- * could visually reorder what she reads, so they never survive the model boundary. */
+ * could visually reorder what she reads, so they never survive the model boundary.
+ * Exported so the cache adapter enforces the same invariant on documents it reads. */
 const FORMAT_CONTROLS = /[‎‏‪-‮⁦-⁩]/g;
 
-function stripFormatControls(text: string): string {
+export function stripSummaryFormatControls(text: string): string {
   return text.replace(FORMAT_CONTROLS, '').trim();
 }
 
@@ -59,7 +61,7 @@ const LlmBatchResponse = z.object({
     z.object({
       messageId: z.string().min(1),
       category: z.enum(EMAIL_CATEGORIES),
-      summary: z.string().transform(stripFormatControls).pipe(z.string().min(1).max(600)),
+      summary: z.string().transform(stripSummaryFormatControls).pipe(z.string().min(1).max(600)),
       urgent: z.boolean(),
     }),
   ),
@@ -93,7 +95,11 @@ export function planDigestBatch(
     // Once even the cheapest possible email cannot fit, the rest is provably overflow —
     // no need to render and measure hundreds of blocks that can never be admitted.
     if (used + MIN_EMAIL_ENVELOPE_TOKENS + BODY_TOKENS_PER_EMAIL > maxInputTokens) {
-      heuristicOnly.push(...emails.slice(index));
+      // Pushed one by one: spreading a 10k+-email overflow into a single push() call
+      // would blow the argument limit on exactly the large-first-sync path this exists for.
+      for (const overflow of emails.slice(index)) {
+        heuristicOnly.push(overflow);
+      }
       break;
     }
     const withEmptyBody: Email = { ...email, bodyText: null, snippet: '' };
@@ -230,8 +236,11 @@ export interface DigestSummarizerDependencies {
   readonly maxInputTokens?: number;
 }
 
+/** Always 8 base64url characters — the fixed width `planDigestBatch` costs blocks with.
+ * CSPRNG-backed so the unpredictability claim never depends on `Math.random`'s
+ * recoverable internal state, even if a prompt were ever disclosed. */
 function defaultNonce(): string {
-  return Math.random().toString(36).slice(2, 10);
+  return randomBytes(6).toString('base64url');
 }
 
 export function createDigestSummarizer(deps: DigestSummarizerDependencies): DigestSummarizer {
@@ -299,9 +308,27 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
     return new Map();
   }
 
+  /** A cache read failure is a miss, not a dead digest — same reasoning as the write
+   * path below: the cache is a cost optimization, and a Firestore blip on the read side
+   * costs at most one re-summarized batch, bounded by the per-digest caps. */
+  async function readCache(
+    uid: string,
+    messageIds: readonly string[],
+  ): Promise<ReadonlyMap<string, EmailSummary>> {
+    try {
+      return await deps.cache.getMany(uid, messageIds);
+    } catch (error) {
+      deps.logger?.warn('summary cache read failed; treating all emails as uncached', {
+        count: messageIds.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+      });
+      return new Map();
+    }
+  }
+
   return {
     async summarize(uid, emails) {
-      const cached = await deps.cache.getMany(uid, emails.map((email) => email.id));
+      const cached = await readCache(uid, emails.map((email) => email.id));
       const uncached = emails.filter((email) => !cached.has(email.id));
       const plan = planDigestBatch(uncached, maxInputTokens);
 

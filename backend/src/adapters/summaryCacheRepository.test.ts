@@ -85,6 +85,49 @@ describe('createFirestoreSummaryCacheStore', () => {
     expect(warned).toEqual([{ messageId: 'msg-1' }]);
   });
 
+  it('treats a document whose stored messageId disagrees with its key as a miss', async () => {
+    const { firestore } = createFakeFirestore({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
+        messageId: 'msg-other',
+        category: 'important',
+        summary: 'ማጠቃለያ',
+        urgent: false,
+        promptVersion: VERSION,
+        createdAt: NOW.toISOString(),
+      },
+    });
+    const store = createFirestoreSummaryCacheStore(firestore, { promptVersion: VERSION });
+
+    const hits = await store.getMany(UID, ['msg-1']);
+
+    expect(hits.size).toBe(0);
+  });
+
+  it('strips directional format controls from summaries read back from storage', async () => {
+    const { firestore } = createFakeFirestore({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
+        messageId: 'msg-1',
+        category: 'important',
+        summary: '‮ማጠቃለያ‬',
+        urgent: false,
+        promptVersion: VERSION,
+        createdAt: NOW.toISOString(),
+      },
+    });
+    const store = createFirestoreSummaryCacheStore(firestore, { promptVersion: VERSION });
+
+    const hits = await store.getMany(UID, ['msg-1']);
+
+    expect(hits.get('msg-1')?.summary).toBe('ማጠቃለያ');
+  });
+
+  it('rejects a prompt version outside the safe document-id charset at construction', () => {
+    const { firestore } = createFakeFirestore();
+    expect(() =>
+      createFirestoreSummaryCacheStore(firestore, { promptVersion: 'digest/v1' }),
+    ).toThrow('promptVersion');
+  });
+
   it('refuses ids that could escape the per-user document keying', async () => {
     const { store, documents } = storeWith();
 

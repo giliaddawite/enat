@@ -58,7 +58,7 @@ measured fixture prompt to 50 emails and fails if it ever exceeds the cap.
   The flip side is deliberate: bumping `PROMPT_VERSION` re-summarizes mail that
   reappears in a digest — a one-day blip bounded by the daily cap above, and the price
   of a prompt fix actually reaching already-summarized email.
-- **Real bodies are short:** 180 tokens is a per-email ceiling; snippets and short mails
+- **Real bodies are short:** 170 tokens is a per-email ceiling; snippets and short mails
   use far less, and unfetched bodies fall back to snippets.
 - **Overflow degrades free:** emails beyond the input cap get category-only treatment
   from sender-domain heuristics — zero API tokens.

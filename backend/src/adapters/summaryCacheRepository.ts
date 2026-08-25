@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SummaryCacheStore } from '../domain/digestPipeline.js';
+import { stripSummaryFormatControls, type SummaryCacheStore } from '../domain/digestPipeline.js';
 import { EMAIL_CATEGORIES, type EmailSummary } from '../domain/summary.js';
 import type { Logger } from '../logging/logger.js';
 import type { FirestoreLike } from './usersRepository.js';
@@ -15,7 +15,9 @@ const SUMMARY_COLLECTION = 'emailSummaries';
 const SummaryDocument = z.object({
   messageId: z.string().min(1),
   category: z.enum(EMAIL_CATEGORIES),
-  summary: z.string().min(1),
+  // Stripped again on the way out, not just on the way in: a document written by an
+  // older build (or altered out-of-band) must not re-introduce directional controls.
+  summary: z.string().transform(stripSummaryFormatControls).pipe(z.string().min(1)),
   urgent: z.boolean(),
   promptVersion: z.string().min(1),
   createdAt: z.string().min(1),
@@ -51,6 +53,11 @@ export function createFirestoreSummaryCacheStore(
   firestore: FirestoreLike,
   options: SummaryCacheRepositoryOptions,
 ): SummaryCacheStore {
+  if (!SAFE_ID.test(options.promptVersion)) {
+    // The version is a repo-owned constant, but it shares the document path with the
+    // shape-checked ids — enforce the invariant where it is stated, and fail at boot.
+    throw new Error('promptVersion must match the safe document-id charset');
+  }
   const now = options.now ?? (() => new Date());
   const collection = firestore.collection(SUMMARY_COLLECTION);
 
@@ -77,20 +84,22 @@ export function createFirestoreSummaryCacheStore(
           }),
         );
         snapshots.forEach((snapshot, index) => {
-          if (snapshot === null || !snapshot.exists) {
+          const requestedId = chunk[index];
+          if (snapshot === null || !snapshot.exists || requestedId === undefined) {
             return;
           }
           const parsed = SummaryDocument.safeParse(snapshot.data());
-          if (!parsed.success) {
-            // A corrupt cache entry must not wedge the digest; treating it as a miss
-            // re-summarizes the email, and the fresh write repairs the document.
+          // The stored messageId must equal the id the document was fetched under: a
+          // document whose content disagrees with its key must never hand one email's
+          // summary to another. Either defect is a miss — re-summarizing repairs it.
+          if (!parsed.success || parsed.data.messageId !== requestedId) {
             options.logger?.warn('cached summary document invalid; re-summarizing', {
-              messageId: chunk[index],
+              messageId: requestedId,
             });
             return;
           }
-          hits.set(parsed.data.messageId, {
-            messageId: parsed.data.messageId,
+          hits.set(requestedId, {
+            messageId: requestedId,
             category: parsed.data.category,
             summary: parsed.data.summary,
             urgent: parsed.data.urgent,
