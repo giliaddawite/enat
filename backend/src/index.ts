@@ -1,10 +1,28 @@
 import type { Server } from 'node:http';
+import { createClaudeSummarizer } from './adapters/claudeClient.js';
+import { createFirestoreDigestStore } from './adapters/digestRepository.js';
 import { createFirestoreClient } from './adapters/firestoreClient.js';
-import { createGoogleIdTokenVerifier } from './adapters/idTokenVerifier.js';
+import { createGmailAccessTokenProvider } from './adapters/gmailAccessTokens.js';
+import { createGmailApiClient } from './adapters/gmailApiClient.js';
+import { createFirestoreGmailSyncStateStore } from './adapters/gmailSyncStateRepository.js';
+import { createGoogleIdTokenVerifier, type IdTokenVerifier } from './adapters/idTokenVerifier.js';
+import { createGoogleSecretManagerClient } from './adapters/secretManagerClient.js';
+import { createSecretManagerRefreshTokenStore } from './adapters/refreshTokenStore.js';
+import { createFirestoreSummaryCacheStore } from './adapters/summaryCacheRepository.js';
 import { createFirestoreUsersRepository } from './adapters/usersRepository.js';
-import { createApp } from './app.js';
+import { createApp, type AppDependencies } from './app.js';
 import { loadConfig, type Config } from './config.js';
+import { toDateKey } from './domain/digest.js';
+import {
+  createDigestGenerationService,
+  GmailNotConnectedError,
+  type DigestUserPipeline,
+} from './domain/digestGeneration.js';
+import { createDigestSummarizer } from './domain/digestPipeline.js';
+import { createGmailSyncService } from './domain/gmailSync.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
+import { PROMPT_VERSION } from './domain/summarizationPrompt.js';
+import type { User } from './domain/user.js';
 import { createLogger, type Logger } from './logging/logger.js';
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -13,25 +31,144 @@ function main(): void {
   const config = loadConfigOrExit();
   const logger = createLogger({ level: config.logLevel });
 
-  const app = createApp({
-    config,
-    logger,
-    // An empty audience list (possible only outside production, where the variable is
-    // optional) rejects every token — /v1/ fails closed rather than open until the local
-    // environment sets GOOGLE_OAUTH_AUDIENCE.
-    idTokenVerifier: createGoogleIdTokenVerifier({ audience: config.googleOAuthAudience ?? [] }),
-    usersRepository: createFirestoreUsersRepository(createFirestoreClient(config.gcpProjectId)),
-    rateLimiter: createRateLimiter({
-      limit: config.rateLimitPerMinute,
-      windowMs: RATE_LIMIT_WINDOW_MS,
-    }),
-  });
+  const app = createApp(buildAppDependencies(config, logger));
 
   const server = app.listen(config.port, () => {
     logger.info('server listening', { port: config.port, environment: config.environment });
   });
 
   installShutdownHandlers(server, logger);
+}
+
+function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
+  const firestore = createFirestoreClient(config.gcpProjectId);
+  const usersRepository = createFirestoreUsersRepository(firestore);
+  const digests = createFirestoreDigestStore(firestore, { logger });
+  const digestGeneration = createDigestGenerationService({
+    digests,
+    buildPipeline: buildDigestUserPipeline(config, firestore, logger),
+    now: () => new Date(),
+    logger,
+  });
+
+  const digestGenerationPush = pubSubPushDependencies(config);
+
+  return {
+    config,
+    logger,
+    // An empty audience list (possible only outside production, where the variable is
+    // optional) rejects every token — /v1/ fails closed rather than open until the local
+    // environment sets GOOGLE_OAUTH_AUDIENCE.
+    idTokenVerifier: createGoogleIdTokenVerifier({ audience: config.googleOAuthAudience ?? [] }),
+    usersRepository,
+    rateLimiter: createRateLimiter({
+      limit: config.rateLimitPerMinute,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    }),
+    digests,
+    digestGeneration,
+    ...(digestGenerationPush ? { digestGenerationPush } : {}),
+  };
+}
+
+/**
+ * Returns a factory that builds one user's Gmail sync + summarizer pipeline (TICKET-105),
+ * bound to their stored refresh token. The shared, user-independent pieces (the summary
+ * cache, the sync-state store, the Claude adapter, the Secret Manager-backed token
+ * provider) are built once here, at boot; only the per-user mailbox — bound to that one
+ * user's `refreshTokenRef` — and the summarizer that closes over it are built inside the
+ * returned factory, once per `generate()` call.
+ *
+ * The factory throws `GmailNotConnectedError` for a user who has not completed the Gmail
+ * consent flow (TICKET-202) yet, and a plain configuration error when this Cloud Run
+ * revision has not been given the Claude/Gmail OAuth secrets it needs — both are ours to
+ * report, not the caller's fault, and the route layer maps them to the right status.
+ */
+function buildDigestUserPipeline(
+  config: Config,
+  firestore: ReturnType<typeof createFirestoreClient>,
+  logger: Logger,
+): (user: User) => DigestUserPipeline {
+  const summaryCache = createFirestoreSummaryCacheStore(firestore, {
+    promptVersion: PROMPT_VERSION,
+    logger,
+  });
+  const syncState = createFirestoreGmailSyncStateStore(firestore, { logger });
+
+  // Built once at boot, not per generation: neither depends on which user is being
+  // generated for, and constructing a Secret Manager client is not free. `null` when the
+  // corresponding config is unset (TICKET-202 for the OAuth client, CLAUDE_API_KEY for
+  // Claude) — every `generate()` call for any user then fails with the same clear error
+  // until this deployment's config is completed, rather than failing to boot at all.
+  const tokenProvider = buildGmailAccessTokenProvider(config, logger);
+  const claudeSummarizerPort =
+    config.claudeApiKey === undefined
+      ? null
+      : createClaudeSummarizer({ apiKey: config.claudeApiKey, logger });
+
+  return (user) => {
+    if (user.refreshTokenRef === null) {
+      throw new GmailNotConnectedError(user.uid);
+    }
+    if (tokenProvider === null || claudeSummarizerPort === null) {
+      // Ours to report, not the caller's fault — see the AppDependencies doc comment on
+      // why this is a 5xx at generation time rather than a boot failure.
+      throw new Error('digest generation is not configured on this deployment');
+    }
+
+    const refreshTokenRef = user.refreshTokenRef;
+    const mailbox = createGmailApiClient({
+      getAccessToken: () => tokenProvider.getAccessToken(refreshTokenRef),
+      logger,
+    });
+    const gmailSync = createGmailSyncService({ mailbox, syncState });
+    const summarizer = createDigestSummarizer({
+      summarizer: claudeSummarizerPort,
+      cache: summaryCache,
+      fetchBodies: (messageIds, maxTokensPerBody) =>
+        gmailSync.fetchBodies(messageIds, maxTokensPerBody),
+      today: () => toDateKey(new Date()),
+      logger,
+    });
+    return { gmailSync, summarizer };
+  };
+}
+
+function buildGmailAccessTokenProvider(
+  config: Config,
+  logger: Logger,
+): ReturnType<typeof createGmailAccessTokenProvider> | null {
+  if (
+    config.googleOAuthClientId === undefined ||
+    config.googleOAuthClientSecret === undefined ||
+    // A Gmail OAuth client without a GCP project to read its secrets from is unusable.
+    config.gcpProjectId === undefined
+  ) {
+    return null;
+  }
+  return createGmailAccessTokenProvider({
+    refreshTokenStore: createSecretManagerRefreshTokenStore(
+      createGoogleSecretManagerClient(config.gcpProjectId),
+      { logger },
+    ),
+    clientId: config.googleOAuthClientId,
+    clientSecret: config.googleOAuthClientSecret,
+  });
+}
+
+function pubSubPushDependencies(
+  config: Config,
+): { idTokenVerifier: IdTokenVerifier; allowedInvokerEmail: string } | undefined {
+  if (
+    config.pubSubPushAudience === undefined ||
+    config.pubSubInvokerServiceAccountEmail === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    idTokenVerifier: createGoogleIdTokenVerifier({ audience: [config.pubSubPushAudience] }),
+    allowedInvokerEmail: config.pubSubInvokerServiceAccountEmail,
+  };
 }
 
 function loadConfigOrExit(): Config {
