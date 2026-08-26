@@ -61,11 +61,17 @@ function scriptedVerifier(
 }
 
 function fixedUsersRepository(user: User = MOM_RECORD): UsersRepository {
-  return { findOrCreateByGoogleId: () => Promise.resolve(user) };
+  return {
+    findOrCreateByGoogleId: () => Promise.resolve(user),
+    getById: () => Promise.resolve(user),
+  };
 }
 
 function failingUsersRepository(error: Error): UsersRepository {
-  return { findOrCreateByGoogleId: () => Promise.reject(error) };
+  return {
+    findOrCreateByGoogleId: () => Promise.reject(error),
+    getById: () => Promise.reject(error),
+  };
 }
 
 async function serve(idTokenVerifier: IdTokenVerifier, usersRepository: UsersRepository) {
@@ -235,6 +241,7 @@ describe('authenticate', () => {
         created = true;
         return Promise.resolve(MOM_RECORD);
       },
+      getById: () => Promise.resolve(MOM_RECORD),
     };
     const { server: running } = await serve(
       scriptedVerifier({ [VALID_TOKEN]: { ...MOM, emailVerified: false } }),

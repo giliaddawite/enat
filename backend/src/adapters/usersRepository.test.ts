@@ -158,6 +158,28 @@ describe('createFirestoreUsersRepository', () => {
     );
   });
 
+  it('getById returns null for a uid with no stored record', async () => {
+    const { firestore } = fakeFirestore();
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    await expect(repository.getById('no-such-uid')).resolves.toBeNull();
+  });
+
+  it('getById returns the stored record without creating one', async () => {
+    const existing = {
+      uid: 'google-user-123',
+      email: 'mom@example.com',
+      createdAt: '2020-01-01T00:00:00.000Z',
+      locale: 'am',
+      refreshTokenRef: 'projects/enat/secrets/gmail-refresh-token-google-user-123/versions/2',
+    };
+    const { firestore, documents } = fakeFirestore({ 'users/google-user-123': existing });
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    await expect(repository.getById('google-user-123')).resolves.toEqual(existing);
+    expect(documents['users/google-user-123']).toEqual(existing);
+  });
+
   it('never includes stored field values in a schema-validation error message', async () => {
     const { firestore } = fakeFirestore({
       'users/google-user-123': { uid: 'google-user-123', email: 'super-secret@example.com' },
