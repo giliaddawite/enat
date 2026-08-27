@@ -66,7 +66,7 @@ const failingSource: DailyVerseSource = {
   },
 };
 
-async function serve(verses: DailyVerseSource) {
+async function serve(verses: DailyVerseSource, now: () => Date = NOW) {
   const logs = captureLogs();
   const config = loadConfig({ NODE_ENV: 'test' });
   server = await startTestServer(
@@ -79,7 +79,7 @@ async function serve(verses: DailyVerseSource) {
       digests,
       digestGeneration,
       verses,
-      now: NOW,
+      now,
     }),
   );
   return { server, logs };
@@ -94,6 +94,10 @@ describe('GET /v1/verse/today', () => {
     const response = await running.fetch('/v1/verse/today', AUTH);
 
     expect(response.status).toBe(200);
+    // Exact equality on purpose: this response is stored by shared caches (`public`) and,
+    // behind a CDN, served without an auth check — nothing per-user, and nothing beyond
+    // these five public fields (the review-only `verified` flag included), may ever
+    // appear in it.
     expect(await response.json()).toEqual({ date: '2026-08-27', ...TODAYS_VERSE });
   });
 
@@ -103,12 +107,23 @@ describe('GET /v1/verse/today', () => {
     expect((await running.fetch('/v1/verse/today')).status).toBe(401);
   });
 
-  it('marks the response cacheable by shared caches for 24 hours', async () => {
-    const { server: running } = await serve(workingSource);
+  it('marks the response cacheable by shared caches until the verse rotates at UTC midnight', async () => {
+    const { server: running } = await serve(workingSource); // noon UTC: half a day left
 
     const response = await running.fetch('/v1/verse/today', AUTH);
 
-    expect(response.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=43200');
+  });
+
+  it('near the rotation boundary, expires the cached copy at midnight — not 24h later', async () => {
+    const { server: running } = await serve(
+      workingSource,
+      () => new Date('2026-08-27T23:00:00.000Z'),
+    );
+
+    const response = await running.fetch('/v1/verse/today', AUTH);
+
+    expect(response.headers.get('cache-control')).toBe('public, max-age=3600');
   });
 
   it('carries an ETag and answers a matching If-None-Match with 304 and no body', async () => {
@@ -124,6 +139,8 @@ describe('GET /v1/verse/today', () => {
 
     expect(revalidation.status).toBe(304);
     expect(await revalidation.text()).toBe('');
+    // The 304 carries the countdown too, so a revalidated copy also expires at midnight.
+    expect(revalidation.headers.get('cache-control')).toBe('public, max-age=43200');
   });
 
   it('serves the same ETag across requests on the same day, so revalidation can hit', async () => {

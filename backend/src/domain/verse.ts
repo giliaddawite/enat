@@ -23,6 +23,12 @@ export interface DailyVerse extends Verse {
   readonly date: string;
 }
 
+/** A dataset entry as checked into `data/verses.json`: the verse plus its review flag.
+ * `verified` never reaches the API response — `servableVerses` strips it. */
+export interface VerseDatasetEntry extends Verse {
+  readonly verified: boolean;
+}
+
 /** Any Ethiopic-script character — catches an entry whose English and Amharic fields were
  * swapped or left untranslated, which no length/format check would notice. */
 const ETHIOPIC = /[ሀ-፿]/;
@@ -52,22 +58,38 @@ export class VerseDatasetError extends Error {
 
 /**
  * Validates the checked-in dataset (`data/verses.json`) at boot — a malformed entry fails
- * the deploy loudly instead of surfacing as a broken card on the phone. The review-only
- * `verified` flag is deliberately dropped: it must never reach the API response.
+ * the deploy loudly instead of surfacing as a broken card on the phone.
  */
-export function parseVerseDataset(data: unknown): readonly Verse[] {
+export function parseVerseDataset(data: unknown): readonly VerseDatasetEntry[] {
   const result = verseDatasetSchema.safeParse(data);
   if (!result.success) {
     // Unlike Gmail/Claude responses, this file holds no private data, so the full
     // validation detail can go in the message — it is what the maintainer fixes the file by.
     throw new VerseDatasetError(z.prettifyError(result.error), { cause: result.error });
   }
-  return result.data.verses.map(({ reference, referenceAm, textEn, textAm }) => ({
-    reference,
-    referenceAm,
-    textEn,
-    textAm,
-  }));
+  return result.data.verses;
+}
+
+/**
+ * The verses a deployment may actually serve. With `requireVerified` (production), only
+ * entries a human has checked against a licensed source qualify — CLAUDE.md's "Amharic
+ * text changes get human review" enforced in code, not just in the PR description. An
+ * all-draft dataset therefore yields an empty list, and the caller degrades to
+ * `FALLBACK_VERSE` (see `index.ts`) rather than showing my mom unreviewed scripture.
+ * The review-only `verified` flag is stripped here: it must never reach the API response.
+ */
+export function servableVerses(
+  entries: readonly VerseDatasetEntry[],
+  options: { readonly requireVerified: boolean },
+): readonly Verse[] {
+  return entries
+    .filter((entry) => !options.requireVerified || entry.verified)
+    .map(({ reference, referenceAm, textEn, textAm }) => ({
+      reference,
+      referenceAm,
+      textEn,
+      textAm,
+    }));
 }
 
 /** Where a day's verse comes from. Substitutable in tests, which is also how the route's
@@ -101,8 +123,21 @@ export function createVerseRotation(verses: readonly Verse[]): DailyVerseSource 
  * so the verse changes at the same instant as the digest's "today". */
 function dayOfYearUtc(date: Date): number {
   const startOfYear = Date.UTC(date.getUTCFullYear(), 0, 1);
-  const startOfDay = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  return (startOfDay - startOfYear) / 86_400_000 + 1;
+  return (startOfUtcDay(date) - startOfYear) / 86_400_000 + 1;
+}
+
+/**
+ * Whole seconds from `now` until the rotation next advances (the coming UTC midnight).
+ * This is the response's cache lifetime: a flat 24h counted from response time would let
+ * a copy fetched at 23:00Z serve yesterday's verse as "fresh" deep into the next day.
+ * Never 0 — at midnight exactly, the new day has a full 86 400 seconds ahead of it.
+ */
+export function secondsUntilVerseRotation(now: Date): number {
+  return 86_400 - Math.floor((now.getTime() - startOfUtcDay(now)) / 1000);
+}
+
+function startOfUtcDay(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 /**

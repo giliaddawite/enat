@@ -5,8 +5,11 @@ import {
   createVerseRotation,
   FALLBACK_VERSE,
   parseVerseDataset,
+  secondsUntilVerseRotation,
+  servableVerses,
   VerseDatasetError,
   type Verse,
+  type VerseDatasetEntry,
 } from './verse.js';
 
 function verse(overrides: Partial<Verse> = {}): Verse {
@@ -19,15 +22,15 @@ function verse(overrides: Partial<Verse> = {}): Verse {
   };
 }
 
-function datasetEntry(overrides: Partial<Verse & { verified: boolean }> = {}): unknown {
+function datasetEntry(overrides: Partial<VerseDatasetEntry> = {}): VerseDatasetEntry {
   return { ...verse(), verified: false, ...overrides };
 }
 
 describe('parseVerseDataset', () => {
-  it('accepts a valid dataset and returns entries without the review-only verified flag', () => {
-    const verses = parseVerseDataset({ verses: [datasetEntry()] });
+  it('accepts a valid dataset and keeps each entry’s review flag', () => {
+    const verses = parseVerseDataset({ verses: [datasetEntry({ verified: true })] });
 
-    expect(verses).toEqual([verse()]);
+    expect(verses).toEqual([{ ...verse(), verified: true }]);
   });
 
   it('rejects a dataset with no verses', () => {
@@ -62,6 +65,31 @@ describe('parseVerseDataset', () => {
 describe('the bundled dataset', () => {
   it('passes boundary validation, so a bad checked-in entry fails this suite before boot', () => {
     expect(loadBundledVerses().length).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('servableVerses', () => {
+  const draft = datasetEntry({ reference: 'Draft 1' });
+  const verified = datasetEntry({ reference: 'Verified 1', verified: true });
+
+  it('serves only maintainer-verified entries when verification is required (production)', () => {
+    const verses = servableVerses([draft, verified], { requireVerified: true });
+
+    expect(verses.map((entry) => entry.reference)).toEqual(['Verified 1']);
+  });
+
+  it('yields no verses — the fallback-only state — when nothing is verified yet', () => {
+    expect(servableVerses([draft], { requireVerified: true })).toEqual([]);
+  });
+
+  it('keeps draft entries outside production so dev and tests exercise the rotation', () => {
+    expect(servableVerses([draft, verified], { requireVerified: false })).toHaveLength(2);
+  });
+
+  it('strips the review-only verified flag, which must never reach the API response', () => {
+    const [entry] = servableVerses([verified], { requireVerified: true });
+
+    expect(entry).toEqual(verse({ reference: 'Verified 1' }));
   });
 });
 
@@ -101,6 +129,20 @@ describe('createVerseRotation', () => {
 
   it('refuses an empty rotation, which could otherwise serve nothing all year', () => {
     expect(() => createVerseRotation([])).toThrow(VerseDatasetError);
+  });
+});
+
+describe('secondsUntilVerseRotation', () => {
+  it('counts down to the coming UTC midnight, when the rotation advances', () => {
+    expect(secondsUntilVerseRotation(new Date('2026-08-27T23:00:00.000Z'))).toBe(3600);
+  });
+
+  it('grants the full day at midnight exactly', () => {
+    expect(secondsUntilVerseRotation(new Date('2026-08-27T00:00:00.000Z'))).toBe(86_400);
+  });
+
+  it('never reaches zero, even in the last moment of the day', () => {
+    expect(secondsUntilVerseRotation(new Date('2026-08-27T23:59:59.999Z'))).toBe(1);
   });
 });
 

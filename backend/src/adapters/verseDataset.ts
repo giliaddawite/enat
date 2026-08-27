@@ -1,5 +1,5 @@
 import rawVerseDataset from '../data/verses.json' with { type: 'json' };
-import { parseVerseDataset, type Verse } from '../domain/verse.js';
+import { parseVerseDataset, type VerseDatasetEntry } from '../domain/verse.js';
 
 /**
  * The checked-in verse rotation (TICKET-106), bundled into the image at build time — no
@@ -11,6 +11,6 @@ import { parseVerseDataset, type Verse } from '../domain/verse.js';
  * Validated at import time: a malformed entry fails boot (the deploy's health check),
  * never a request.
  */
-export function loadBundledVerses(): readonly Verse[] {
+export function loadBundledVerses(): readonly VerseDatasetEntry[] {
   return parseVerseDataset(rawVerseDataset);
 }

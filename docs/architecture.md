@@ -146,9 +146,15 @@ JWKS for signature/audience/expiry and rate-limited per user (TICKET-102).
 - **Verse service** (TICKET-106) — `GET /v1/verse/today` from a curated
   rotation checked into the repo (`backend/src/data/verses.json`) and served
   from memory — a few hundred KB of static bilingual text needs no Firestore
-  collection and no I/O on the read path. 24h `Cache-Control: public` + ETag
-  (actual edge caching engages when a CDN/LB fronts the service), hard-coded
-  fallback verse. Licensing and verification status: `docs/verse-licensing.md`.
+  collection and no I/O on the read path. In production only entries the
+  maintainer has marked `verified: true` are served; until any are, the
+  hardcoded fallback verse stands in. `Cache-Control: public` with a max-age
+  counting down to UTC midnight, plus ETag (actual edge caching engages when a
+  CDN/LB fronts the service). The rotation deliberately advances at **UTC**
+  midnight — the same day boundary the digest uses — so the verse changes
+  around 8 PM ET; accepted for consistency and shared-cache correctness
+  (flagged to the maintainer). Licensing and verification status:
+  `docs/verse-licensing.md`.
 
 ### Data (Firestore)
 

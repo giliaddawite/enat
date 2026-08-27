@@ -27,11 +27,14 @@ export interface AppDependencies {
   readonly digests: DigestStore;
   readonly digestGeneration: DigestGenerationService;
   /**
-   * The daily verse rotation (TICKET-106), bundled with the build — see
-   * `adapters/verseDataset.ts`. Kept under the authenticated `v1` router deliberately:
-   * CLAUDE.md's "auth on every request" beats shaving one JWKS check off a route that is
-   * already client-cached for 24h, and `Cache-Control: public` still permits a future CDN
-   * to cache the response despite the Authorization header (RFC 9111 §3.5).
+   * The daily verse rotation (TICKET-106), bundled with the build and filtered to
+   * maintainer-verified entries in production — see `buildVerseSource` in `index.ts`.
+   * Kept under the authenticated `v1` router: auth holds for every request that reaches
+   * this service. Know what that does NOT promise: a CDN's default cache key excludes the
+   * Authorization header, so once a CDN fronts this service, cache hits on `/v1/verse/
+   * today` are served to anyone without an auth check. That is a deliberate, recorded
+   * decision — the response is public-domain scripture, identical for every caller, and
+   * nothing per-user may ever enter it (`routes/verse.test.ts` pins the exact shape).
    */
   readonly verses: DailyVerseSource;
   /** Injected clock; only the calendar date reaches the digest routes. Defaults to the
