@@ -6,7 +6,6 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -65,7 +64,7 @@ class HomeScreenTest {
         setScreen(HomeUiState.Greeting(TimeOfDay.AFTERNOON), onRefresh = { refreshed = true })
 
         composeTestRule
-            .onNodeWithContentDescription(context.getString(R.string.home_refresh_content_description))
+            .onNodeWithText(context.getString(R.string.home_refresh_button))
             .performClick()
 
         assertTrue(refreshed)
@@ -76,7 +75,7 @@ class HomeScreenTest {
         setScreen(HomeUiState.Greeting(TimeOfDay.AFTERNOON))
 
         composeTestRule
-            .onNodeWithContentDescription(context.getString(R.string.home_refresh_content_description))
+            .onNodeWithText(context.getString(R.string.home_refresh_button))
             .assertHeightIsAtLeast(64.dp)
     }
 
@@ -89,7 +88,7 @@ class HomeScreenTest {
             .onNodeWithText(context.getString(R.string.home_error))
             .assertIsDisplayed()
         composeTestRule
-            .onNodeWithContentDescription(context.getString(R.string.home_retry_content_description))
+            .onNodeWithText(context.getString(R.string.home_retry_button))
             .performClick()
 
         assertTrue(refreshed)

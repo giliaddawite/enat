@@ -21,8 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -111,7 +109,6 @@ private fun GreetingContent(
     )
     RefreshButton(
         label = stringResource(R.string.home_refresh_button),
-        description = stringResource(R.string.home_refresh_content_description),
         onClick = onRefresh,
     )
 }
@@ -130,15 +127,16 @@ private fun ErrorContent(onRefresh: () -> Unit) {
     )
     RefreshButton(
         label = stringResource(R.string.home_retry_button),
-        description = stringResource(R.string.home_retry_content_description),
         onClick = onRefresh,
     )
 }
 
+// No contentDescription override: TalkBack reads the visible label itself, and a
+// duplicate description would drown it out (the redundant-description
+// anti-pattern). Text buttons only ever need their label.
 @Composable
 private fun RefreshButton(
     label: String,
-    description: String,
     onClick: () -> Unit,
 ) {
     Button(
@@ -148,8 +146,7 @@ private fun RefreshButton(
                 .padding(top = 32.dp)
                 .fillMaxWidth()
                 // 64dp minimum touch target — deliberately above the 48dp guideline.
-                .heightIn(min = 64.dp)
-                .semantics { contentDescription = description },
+                .heightIn(min = 64.dp),
     ) {
         Text(text = label, style = MaterialTheme.typography.labelLarge)
     }
