@@ -36,6 +36,16 @@ val stagingApiBaseUrl: String =
         ?: localApiBaseUrl
         ?: "https://enat-api-staging.example.run.app/v1/"
 
+// The web OAuth client id drives the server auth-code flow (TICKET-202). It is
+// configuration, not a secret — it appears in every consent screen URL — but per the
+// TICKET-201 review it stays out of tracked files, following the enatApiBaseUrl
+// pattern above. The placeholder fails obviously at runtime: the setup screen
+// detects the MISSING prefix and shows a configuration error instead of crashing.
+val googleWebClientId: String =
+    providers.gradleProperty("enatGoogleWebClientId").orNull
+        ?: localProperties.getProperty("enatGoogleWebClientId")
+        ?: "MISSING.apps.googleusercontent.com"
+
 android {
     namespace = "com.enat.app"
     compileSdk = 35
@@ -49,6 +59,8 @@ android {
 
         // Amharic-first with English fallback — no other locales ship.
         resourceConfigurations += listOf("am", "en")
+
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"$googleWebClientId\"")
     }
 
     // Release signing comes from CI secrets (deploy.yml) via environment variables.
@@ -158,6 +170,18 @@ dependencies {
     implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+
+    // Google sign-in + Gmail consent (TICKET-202). Credential Manager mints the ID
+    // token; googleid parses its result; play-services-auth provides the
+    // AuthorizationClient for the server auth-code flow (the token exchange happens
+    // on the backend — no client secret exists in this app); the coroutines
+    // play-services bridge converts Task callbacks to suspend calls instead of
+    // hand-rolled listeners.
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.googleid)
+    implementation(libs.play.services.auth)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.crashlytics)
