@@ -4,6 +4,7 @@ import type { UsersRepository } from './adapters/usersRepository.js';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
+import type { GmailConsentService } from './domain/gmailConsent.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
 import { FALLBACK_VERSE, type DailyVerseSource } from './domain/verse.js';
 import { captureLogs, startTestServer, type TestServer } from './testing/httpTestServer.js';
@@ -37,6 +38,7 @@ const stubUsersRepository: UsersRepository = {
       refreshTokenRef: null,
     }),
   getById: () => Promise.resolve(null),
+  setRefreshTokenRef: () => Promise.resolve(),
 };
 
 const stubDigests: DigestStore = {
@@ -46,6 +48,10 @@ const stubDigests: DigestStore = {
 
 const stubDigestGeneration: DigestGenerationService = {
   generate: () => Promise.reject(new Error('not exercised by these tests')),
+};
+
+const stubGmailConsent: GmailConsentService = {
+  connect: () => Promise.reject(new Error('not exercised by these tests')),
 };
 
 const stubVerses: DailyVerseSource = {
@@ -64,6 +70,7 @@ async function serve() {
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
       digests: stubDigests,
       digestGeneration: stubDigestGeneration,
+      gmailConsent: stubGmailConsent,
       verses: stubVerses,
     }),
   );

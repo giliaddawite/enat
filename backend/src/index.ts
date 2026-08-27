@@ -2,12 +2,23 @@ import type { Server } from 'node:http';
 import { createClaudeSummarizer } from './adapters/claudeClient.js';
 import { createFirestoreDigestStore } from './adapters/digestRepository.js';
 import { createFirestoreClient } from './adapters/firestoreClient.js';
-import { createGmailAccessTokenProvider } from './adapters/gmailAccessTokens.js';
+import {
+  createGmailAccessTokenProvider,
+  type GmailAccessTokenProvider,
+} from './adapters/gmailAccessTokens.js';
 import { createGmailApiClient } from './adapters/gmailApiClient.js';
+import { createGoogleAuthCodeExchanger } from './adapters/googleAuthCodeExchange.js';
 import { createFirestoreGmailSyncStateStore } from './adapters/gmailSyncStateRepository.js';
-import { createGoogleIdTokenVerifier, type IdTokenVerifier } from './adapters/idTokenVerifier.js';
+import {
+  createGoogleIdTokenVerifier,
+  IdTokenRejectedError,
+  type IdTokenVerifier,
+} from './adapters/idTokenVerifier.js';
 import { createGoogleSecretManagerClient } from './adapters/secretManagerClient.js';
-import { createSecretManagerRefreshTokenStore } from './adapters/refreshTokenStore.js';
+import {
+  createSecretManagerRefreshTokenStore,
+  type RefreshTokenStore,
+} from './adapters/refreshTokenStore.js';
 import { createFirestoreSummaryCacheStore } from './adapters/summaryCacheRepository.js';
 import { createFirestoreUsersRepository } from './adapters/usersRepository.js';
 import { loadBundledVerses } from './adapters/verseDataset.js';
@@ -20,6 +31,11 @@ import {
   type DigestUserPipeline,
 } from './domain/digestGeneration.js';
 import { createDigestSummarizer } from './domain/digestPipeline.js';
+import {
+  createGmailConsentService,
+  type AuthCodeGrant,
+  type GmailConsentService,
+} from './domain/gmailConsent.js';
 import { createGmailSyncService } from './domain/gmailSync.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
 import { PROMPT_VERSION } from './domain/summarizationPrompt.js';
@@ -51,9 +67,10 @@ function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
   const firestore = createFirestoreClient(config.gcpProjectId);
   const usersRepository = createFirestoreUsersRepository(firestore);
   const digests = createFirestoreDigestStore(firestore, { logger });
+  const gmailOAuth = buildGmailOAuthAdapters(config, logger);
   const digestGeneration = createDigestGenerationService({
     digests,
-    buildPipeline: buildDigestUserPipeline(config, firestore, logger),
+    buildPipeline: buildDigestUserPipeline(config, firestore, logger, gmailOAuth),
     now: () => new Date(),
     logger,
   });
@@ -74,9 +91,92 @@ function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
     }),
     digests,
     digestGeneration,
+    gmailConsent: buildGmailConsentService(gmailOAuth, usersRepository, logger),
     verses: buildVerseSource(config, logger),
     ...(digestGenerationPush ? { digestGenerationPush } : {}),
   };
+}
+
+/**
+ * The adapters shared by both faces of the Gmail OAuth grant (TICKET-202): the consent
+ * flow that stores the refresh token and the access-token minting that redeems it.
+ * `null` when this deployment is missing the OAuth client secrets or a GCP project to
+ * keep tokens in — the dependent features then answer a clear 5xx at request time (see
+ * the pipeline factory below and `buildGmailConsentService`) rather than failing boot.
+ */
+interface GmailOAuthAdapters {
+  readonly refreshTokenStore: RefreshTokenStore;
+  readonly accessTokens: GmailAccessTokenProvider;
+  readonly exchangeAuthCode: (authCode: string) => Promise<AuthCodeGrant>;
+  /** See `GmailConsentDependencies.verifyConsentIdToken`: the subject the exchange's
+   * id_token asserts, or `null` for a token that does not verify. */
+  readonly verifyConsentIdToken: (idToken: string) => Promise<string | null>;
+}
+
+function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdapters | null {
+  if (
+    config.googleOAuthClientId === undefined ||
+    config.googleOAuthClientSecret === undefined ||
+    // A Gmail OAuth client without a GCP project to keep its refresh tokens in is unusable.
+    config.gcpProjectId === undefined
+  ) {
+    return null;
+  }
+  const refreshTokenStore = createSecretManagerRefreshTokenStore(
+    createGoogleSecretManagerClient(config.gcpProjectId),
+    { logger },
+  );
+  // Bound to the OAuth client the exchange itself uses — the id_token in a code-exchange
+  // response carries that client as its `aud`, which may differ from the inbound-request
+  // audience list (GOOGLE_OAUTH_AUDIENCE).
+  const consentIdTokenVerifier = createGoogleIdTokenVerifier({
+    audience: [config.googleOAuthClientId],
+  });
+  return {
+    refreshTokenStore,
+    accessTokens: createGmailAccessTokenProvider({
+      refreshTokenStore,
+      clientId: config.googleOAuthClientId,
+      clientSecret: config.googleOAuthClientSecret,
+    }),
+    exchangeAuthCode: createGoogleAuthCodeExchanger({
+      clientId: config.googleOAuthClientId,
+      clientSecret: config.googleOAuthClientSecret,
+    }),
+    verifyConsentIdToken: async (idToken) => {
+      try {
+        return (await consentIdTokenVerifier.verify(idToken)).googleUserId;
+      } catch (error) {
+        if (error instanceof IdTokenRejectedError) {
+          // An invalid token is the client's problem (account_mismatch), not an outage.
+          return null;
+        }
+        throw error;
+      }
+    },
+  };
+}
+
+function buildGmailConsentService(
+  gmailOAuth: GmailOAuthAdapters | null,
+  usersRepository: ReturnType<typeof createFirestoreUsersRepository>,
+  logger: Logger,
+): GmailConsentService {
+  if (gmailOAuth === null) {
+    return {
+      // Ours to report, not the caller's fault — same pattern as digest generation: the
+      // route answers a clear 5xx until this deployment's config is completed.
+      connect: () =>
+        Promise.reject(new Error('gmail consent is not configured on this deployment')),
+    };
+  }
+  return createGmailConsentService({
+    exchangeAuthCode: gmailOAuth.exchangeAuthCode,
+    verifyConsentIdToken: gmailOAuth.verifyConsentIdToken,
+    refreshTokens: gmailOAuth.refreshTokenStore,
+    users: usersRepository,
+    logger,
+  });
 }
 
 /**
@@ -121,6 +221,7 @@ function buildDigestUserPipeline(
   config: Config,
   firestore: ReturnType<typeof createFirestoreClient>,
   logger: Logger,
+  gmailOAuth: GmailOAuthAdapters | null,
 ): (user: User) => DigestUserPipeline {
   const summaryCache = createFirestoreSummaryCacheStore(firestore, {
     promptVersion: PROMPT_VERSION,
@@ -128,12 +229,10 @@ function buildDigestUserPipeline(
   });
   const syncState = createFirestoreGmailSyncStateStore(firestore, { logger });
 
-  // Built once at boot, not per generation: neither depends on which user is being
-  // generated for, and constructing a Secret Manager client is not free. `null` when the
-  // corresponding config is unset (TICKET-202 for the OAuth client, CLAUDE_API_KEY for
-  // Claude) — every `generate()` call for any user then fails with the same clear error
-  // until this deployment's config is completed, rather than failing to boot at all.
-  const tokenProvider = buildGmailAccessTokenProvider(config, logger);
+  // Built once at boot, not per generation: it does not depend on which user is being
+  // generated for. `null` when CLAUDE_API_KEY is unset — every `generate()` call for any
+  // user then fails with the same clear error until this deployment's config is
+  // completed, rather than failing to boot at all. `gmailOAuth` follows the same rule.
   const claudeSummarizerPort =
     config.claudeApiKey === undefined
       ? null
@@ -143,7 +242,7 @@ function buildDigestUserPipeline(
     if (user.refreshTokenRef === null) {
       throw new GmailNotConnectedError(user.uid);
     }
-    if (tokenProvider === null || claudeSummarizerPort === null) {
+    if (gmailOAuth === null || claudeSummarizerPort === null) {
       // Ours to report, not the caller's fault — see the AppDependencies doc comment on
       // why this is a 5xx at generation time rather than a boot failure.
       throw new Error('digest generation is not configured on this deployment');
@@ -151,7 +250,7 @@ function buildDigestUserPipeline(
 
     const refreshTokenRef = user.refreshTokenRef;
     const mailbox = createGmailApiClient({
-      getAccessToken: () => tokenProvider.getAccessToken(refreshTokenRef),
+      getAccessToken: () => gmailOAuth.accessTokens.getAccessToken(refreshTokenRef),
       logger,
     });
     const gmailSync = createGmailSyncService({ mailbox, syncState });
@@ -165,28 +264,6 @@ function buildDigestUserPipeline(
     });
     return { gmailSync, summarizer };
   };
-}
-
-function buildGmailAccessTokenProvider(
-  config: Config,
-  logger: Logger,
-): ReturnType<typeof createGmailAccessTokenProvider> | null {
-  if (
-    config.googleOAuthClientId === undefined ||
-    config.googleOAuthClientSecret === undefined ||
-    // A Gmail OAuth client without a GCP project to read its secrets from is unusable.
-    config.gcpProjectId === undefined
-  ) {
-    return null;
-  }
-  return createGmailAccessTokenProvider({
-    refreshTokenStore: createSecretManagerRefreshTokenStore(
-      createGoogleSecretManagerClient(config.gcpProjectId),
-      { logger },
-    ),
-    clientId: config.googleOAuthClientId,
-    clientSecret: config.googleOAuthClientSecret,
-  });
 }
 
 function pubSubPushDependencies(

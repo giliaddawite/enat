@@ -40,6 +40,7 @@ const usersRepository: UsersRepository = {
       refreshTokenRef: null,
     }),
   getById: () => Promise.resolve(null),
+  setRefreshTokenRef: () => Promise.resolve(),
 };
 
 const digests: DigestStore = {
@@ -78,6 +79,7 @@ async function serve(verses: DailyVerseSource, now: () => Date = NOW) {
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
       digests,
       digestGeneration,
+      gmailConsent: { connect: () => Promise.reject(new Error('not exercised by these tests')) },
       verses,
       now,
     }),

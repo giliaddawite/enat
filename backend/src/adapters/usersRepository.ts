@@ -11,6 +11,12 @@ export interface UsersRepository {
    * from somewhere other than a freshly-verified ID token (TICKET-105's Pub/Sub push
    * handler, given a uid in the scheduled message rather than a bearer token). */
   getById(uid: string): Promise<User | null>;
+  /** Points the user's record at their (re-)stored Gmail refresh token — the Secret
+   * Manager version name `RefreshTokenStore.put` returned, never the token itself. Only
+   * the consent flow (TICKET-202) writes this field. Rejects for a uid with no record:
+   * consent runs behind `authenticate`, which has already created the user, so a missing
+   * document here is a bug worth a loud 500, not a silent upsert. */
+  setRefreshTokenRef(uid: string, refreshTokenRef: string): Promise<void>;
 }
 
 /**
@@ -89,6 +95,10 @@ export function createFirestoreUsersRepository(
         return null;
       }
       return parseUserDocument(snapshot.data());
+    },
+
+    async setRefreshTokenRef(uid, refreshTokenRef) {
+      await users.doc(uid).update({ refreshTokenRef });
     },
   };
 }

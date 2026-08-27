@@ -2,11 +2,12 @@ import type { Request, RequestHandler, Response } from 'express';
 import { computeDigestETag, toDateKey, type Digest } from '../domain/digest.js';
 import {
   GmailNotConnectedError,
+  GmailReconnectRequiredError,
   type DigestGenerationService,
   type DigestStore,
 } from '../domain/digestGeneration.js';
-import type { User } from '../domain/user.js';
 import { HttpError } from '../http/httpError.js';
+import { requireUser } from '../http/requireUser.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -72,6 +73,13 @@ async function handleGenerate(
         code: 'gmail_not_connected',
       });
     }
+    if (error instanceof GmailReconnectRequiredError) {
+      // Distinguishable from `gmail_not_connected` on purpose: the app renders a "Gmail
+      // access was revoked — reconnect" card for this one (TICKET-202), not first-run setup.
+      throw new HttpError(409, 'Gmail access is no longer valid. Reconnect Gmail to continue.', {
+        code: 'gmail_reconnect_required',
+      });
+    }
     throw error;
   }
 }
@@ -87,14 +95,4 @@ function respondWithDigest(req: Request, res: Response, digest: Digest): void {
     return;
   }
   res.status(200).json(digest);
-}
-
-function requireUser(req: Request): User {
-  // Unreachable in practice: this route is only mounted behind `authenticate` on the `v1`
-  // router (see app.ts). Guarded rather than asserted so a future mounting mistake fails
-  // loudly as a 401, not a crash.
-  if (req.user === undefined) {
-    throw new HttpError(401);
-  }
-  return req.user;
 }

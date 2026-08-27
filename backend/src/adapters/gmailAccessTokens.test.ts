@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GmailReconnectRequiredError } from '../domain/digestGeneration.js';
 import { createGmailAccessTokenProvider } from './gmailAccessTokens.js';
 
 const REF = 'projects/enat/secrets/gmail-refresh-token-uid/versions/1';
@@ -95,7 +96,7 @@ describe('createGmailAccessTokenProvider', () => {
 
   it('fails on a non-2xx response without exposing token material', async () => {
     const { fetchImpl } = fakeTokenEndpoint([
-      () => new Response('{"error":"invalid_grant"}', { status: 400 }),
+      () => new Response('{"error":"invalid_client"}', { status: 401 }),
     ]);
     const provider = createGmailAccessTokenProvider({
       refreshTokenStore,
@@ -109,9 +110,49 @@ describe('createGmailAccessTokenProvider', () => {
       .getAccessToken(REF)
       .catch((caught: unknown) => caught)) as Error;
 
-    expect(error.message).toContain('status 400');
+    expect(error.message).toContain('status 401');
     expect(error.message).not.toContain('refresh-token-secret');
-    expect(error.message).not.toContain('invalid_grant');
+    expect(error.message).not.toContain('invalid_client');
+  });
+
+  it('maps invalid_grant to GmailReconnectRequiredError so callers can prompt re-consent', async () => {
+    const { fetchImpl } = fakeTokenEndpoint([
+      () => new Response('{"error":"invalid_grant","error_description":"Token has been revoked."}', { status: 400 }),
+    ]);
+    const provider = createGmailAccessTokenProvider({
+      refreshTokenStore,
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      fetch: fetchImpl,
+      now: () => 0,
+    });
+
+    const error = (await provider
+      .getAccessToken(REF)
+      .catch((caught: unknown) => caught)) as Error;
+
+    expect(error).toBeInstanceOf(GmailReconnectRequiredError);
+    expect(error.message).not.toContain('refresh-token-secret');
+  });
+
+  it('treats a non-JSON error body as a plain failure, not a revoked grant', async () => {
+    const { fetchImpl } = fakeTokenEndpoint([
+      () => new Response('<html>Bad Gateway</html>', { status: 502 }),
+    ]);
+    const provider = createGmailAccessTokenProvider({
+      refreshTokenStore,
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      fetch: fetchImpl,
+      now: () => 0,
+    });
+
+    const error = (await provider
+      .getAccessToken(REF)
+      .catch((caught: unknown) => caught)) as Error;
+
+    expect(error).not.toBeInstanceOf(GmailReconnectRequiredError);
+    expect(error.message).toContain('status 502');
   });
 
   it('rejects a response that fails schema validation', async () => {

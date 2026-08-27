@@ -1,7 +1,11 @@
 import express from 'express';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Digest } from '../domain/digest.js';
-import { GmailNotConnectedError, type DigestGenerationService } from '../domain/digestGeneration.js';
+import {
+  GmailNotConnectedError,
+  GmailReconnectRequiredError,
+  type DigestGenerationService,
+} from '../domain/digestGeneration.js';
 import type { User } from '../domain/user.js';
 import { errorHandler } from '../http/errorHandler.js';
 import { notFound } from '../http/notFound.js';
@@ -133,6 +137,21 @@ describe('createDigestGenerationPushHandler', () => {
     const running = await serve({
       getUser: () => Promise.resolve(USER),
       generation: fakeGeneration(() => Promise.reject(new GmailNotConnectedError(USER.uid))),
+    });
+
+    const response = await running.fetch('/internal/digest-generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(pushEnvelope({ uid: 'uid-1' })),
+    });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('acks when the Gmail grant was revoked — only re-consent on the device fixes that', async () => {
+    const running = await serve({
+      getUser: () => Promise.resolve(USER),
+      generation: fakeGeneration(() => Promise.reject(new GmailReconnectRequiredError())),
     });
 
     const response = await running.fetch('/internal/digest-generate', {
