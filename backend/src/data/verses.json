@@ -1,0 +1,215 @@
+{
+  "note": "DRAFT starter rotation (30 of the planned 365 entries) for TICKET-106. English text is quoted from the King James Version (public domain in the US). Amharic text is a machine-drafted rendering in the style of the standard Amharic Bible and is UNVERIFIED against any licensed source — every entry carries verified:false until the maintainer checks it and flips the flag. Licensing status and sourcing plan: docs/verse-licensing.md. Do not ship verified:true without a human check.",
+  "verses": [
+    {
+      "reference": "John 3:16",
+      "referenceAm": "ዮሐንስ 3፥16",
+      "textEn": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
+      "textAm": "በእርሱ የሚያምን ሁሉ የዘላለም ሕይወት እንዲኖረው እንጂ እንዳይጠፋ እግዚአብሔር አንድያ ልጁን እስኪሰጥ ድረስ ዓለሙን እንዲሁ ወዶአልና።",
+      "verified": false
+    },
+    {
+      "reference": "Psalm 23:1",
+      "referenceAm": "መዝሙር 23፥1",
+      "textEn": "The LORD is my shepherd; I shall not want.",
+      "textAm": "እግዚአብሔር እረኛዬ ነው፤ የሚያሳጣኝም የለም።",
+      "verified": false
+    },
+    {
+      "reference": "Philippians 4:13",
+      "referenceAm": "ፊልጵስዩስ 4፥13",
+      "textEn": "I can do all things through Christ which strengtheneth me.",
+      "textAm": "ኃይልን በሚሰጠኝ በክርስቶስ ሁሉን እችላለሁ።",
+      "verified": false
+    },
+    {
+      "reference": "Jeremiah 29:11",
+      "referenceAm": "ኤርምያስ 29፥11",
+      "textEn": "For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end.",
+      "textAm": "እኔ ስለ እናንተ የማስበውን አሳብ አውቃለሁ ይላል እግዚአብሔር፤ ተስፋና መጨረሻ እሰጣችሁ ዘንድ የሰላም አሳብ ነው እንጂ የክፉ አይደለም።",
+      "verified": false
+    },
+    {
+      "reference": "Proverbs 3:5",
+      "referenceAm": "ምሳሌ 3፥5",
+      "textEn": "Trust in the LORD with all thine heart; and lean not unto thine own understanding.",
+      "textAm": "በፍጹም ልብህ በእግዚአብሔር ታመን፥ በራስህም ማስተዋል አትደገፍ።",
+      "verified": false
+    },
+    {
+      "reference": "Isaiah 41:10",
+      "referenceAm": "ኢሳይያስ 41፥10",
+      "textEn": "Fear thou not; for I am with thee: be not dismayed; for I am thy God: I will strengthen thee; yea, I will help thee; yea, I will uphold thee with the right hand of my righteousness.",
+      "textAm": "እኔ ከአንተ ጋር ነኝና አትፍራ፤ እኔ አምላክህ ነኝና አትደንግጥ፤ አበረታሃለሁ፥ እረዳሃለሁም፥ በጽድቄም ቀኝ እደግፍሃለሁ።",
+      "verified": false
+    },
+    {
+      "reference": "Romans 8:28",
+      "referenceAm": "ሮሜ 8፥28",
+      "textEn": "And we know that all things work together for good to them that love God, to them who are the called according to his purpose.",
+      "textAm": "እግዚአብሔርንም ለሚወዱት እንደ አሳቡም ለተጠሩት ነገር ሁሉ ለበጎ እንዲደረግ እናውቃለን።",
+      "verified": false
+    },
+    {
+      "reference": "Joshua 1:9",
+      "referenceAm": "ኢያሱ 1፥9",
+      "textEn": "Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest.",
+      "textAm": "አላዘዝሁህምን? ጽና፥ አይዞህም፤ አምላክህ እግዚአብሔር በምትሄድበት ሁሉ ከአንተ ጋር ነውና አትፍራ፥ አትደንግጥም።",
+      "verified": false
+    },
+    {
+      "reference": "Psalm 46:1",
+      "referenceAm": "መዝሙር 46፥1",
+      "textEn": "God is our refuge and strength, a very present help in trouble.",
+      "textAm": "እግዚአብሔር መጠጊያችንና ኃይላችን ነው፥ በመከራም ጊዜ ቅርብ ረዳታችን ነው።",
+      "verified": false
+    },
+    {
+      "reference": "Matthew 11:28",
+      "referenceAm": "ማቴዎስ 11፥28",
+      "textEn": "Come unto me, all ye that labour and are heavy laden, and I will give you rest.",
+      "textAm": "እናንተ ደካሞች ሸክማችሁ የከበደ ሁሉ፥ ወደ እኔ ኑ፥ እኔም አሳርፋችኋለሁ።",
+      "verified": false
+    },
+    {
+      "reference": "John 14:6",
+      "referenceAm": "ዮሐንስ 14፥6",
+      "textEn": "Jesus saith unto him, I am the way, the truth, and the life: no man cometh unto the Father, but by me.",
+      "textAm": "ኢየሱስም። እኔ መንገድና እውነት ሕይወትም ነኝ፤ በእኔ በቀር ወደ አብ የሚመጣ የለም አለው።",
+      "verified": false
+    },
+    {
+      "reference": "Psalm 118:24",
+      "referenceAm": "መዝሙር 118፥24",
+      "textEn": "This is the day which the LORD hath made; we will rejoice and be glad in it.",
+      "textAm": "ይህች እግዚአብሔር የሠራት ቀን ናት፤ ሐሤትን እናድርግ በእርስዋም ደስ ይበለን።",
+      "verified": false
+    },
+    {
+      "reference": "Isaiah 40:31",
+      "referenceAm": "ኢሳይያስ 40፥31",
+      "textEn": "But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint.",
+      "textAm": "እግዚአብሔርን የሚጠባበቁ ግን ኃይላቸውን ያድሳሉ፤ እንደ ንስር በክንፍ ይወጣሉ፤ ይሮጣሉ፥ አይታክቱም፤ ይሄዳሉ፥ አይደክሙም።",
+      "verified": false
+    },
+    {
+      "reference": "1 Corinthians 13:4",
+      "referenceAm": "1ኛ ቆሮንቶስ 13፥4",
+      "textEn": "Charity suffereth long, and is kind; charity envieth not; charity vaunteth not itself, is not puffed up,",
+      "textAm": "ፍቅር ይታገሣል፥ ቸርነትንም ያደርጋል፤ ፍቅር አይቀናም፤ ፍቅር አይመካም፥ አይታበይም፤",
+      "verified": false
+    },
+    {
+      "reference": "Psalm 121:2",
+      "referenceAm": "መዝሙር 121፥2",
+      "textEn": "My help cometh from the LORD, which made heaven and earth.",
+      "textAm": "ረድኤቴ ሰማይንና ምድርን ከሠራ ከእግዚአብሔር ዘንድ ነው።",
+      "verified": false
+    },
+    {
+      "reference": "Romans 12:12",
+      "referenceAm": "ሮሜ 12፥12",
+      "textEn": "Rejoicing in hope; patient in tribulation; continuing instant in prayer;",
+      "textAm": "በተስፋ ደስ ይበላችሁ፤ በመከራ ታገሡ፤ በጸሎት ጽኑ፤",
+      "verified": false
+    },
+    {
+      "reference": "Galatians 5:22",
+      "referenceAm": "ገላትያ 5፥22",
+      "textEn": "But the fruit of the Spirit is love, joy, peace, longsuffering, gentleness, goodness, faith,",
+      "textAm": "የመንፈስ ፍሬ ግን ፍቅር፥ ደስታ፥ ሰላም፥ ትዕግሥት፥ ቸርነት፥ በጎነት፥ እምነት ነው፤",
+      "verified": false
+    },
+    {
+      "reference": "Ephesians 2:8",
+      "referenceAm": "ኤፌሶን 2፥8",
+      "textEn": "For by grace are ye saved through faith; and that not of yourselves: it is the gift of God:",
+      "textAm": "ጸጋው በእምነት አድኖአችኋልና፤ ይህም የእግዚአብሔር ስጦታ ነው እንጂ ከእናንተ አይደለም፤",
+      "verified": false
+    },
+    {
+      "reference": "Psalm 27:1",
+      "referenceAm": "መዝሙር 27፥1",
+      "textEn": "The LORD is my light and my salvation; whom shall I fear? the LORD is the strength of my life; of whom shall I be afraid?",
+      "textAm": "እግዚአብሔር ብርሃኔና መድኃኒቴ ነው፤ የሚያስፈራኝ ማን ነው? እግዚአብሔር የሕይወቴ ኃይል ነው፤ የሚያስደነግጠኝ ማን ነው?",
+      "verified": false
+    },
+    {
+      "reference": "Matthew 6:33",
+      "referenceAm": "ማቴዎስ 6፥33",
+      "textEn": "But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you.",
+      "textAm": "ነገር ግን አስቀድማችሁ የእግዚአብሔርን መንግሥት ጽድቁንም ፈልጉ፥ ይህም ሁሉ ይጨመርላችኋል።",
+      "verified": false
+    },
+    {
+      "reference": "John 8:12",
+      "referenceAm": "ዮሐንስ 8፥12",
+      "textEn": "Then spake Jesus again unto them, saying, I am the light of the world: he that followeth me shall not walk in darkness, but shall have the light of life.",
+      "textAm": "ደግሞም ኢየሱስ። እኔ የዓለም ብርሃን ነኝ፤ የሚከተለኝ የሕይወት ብርሃን ይሆንለታል እንጂ በጨለማ አይመላለስም ብሎ ተናገራቸው።",
+      "verified": false
+    },
+    {
+      "reference": "Philippians 4:6",
+      "referenceAm": "ፊልጵስዩስ 4፥6",
+      "textEn": "Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God.",
+      "textAm": "በነገር ሁሉ በጸሎትና በምልጃ ከምስጋና ጋር በእግዚአብሔር ዘንድ ልመናችሁን አስታውቁ እንጂ በአንዳች አትጨነቁ።",
+      "verified": false
+    },
+    {
+      "reference": "2 Timothy 1:7",
+      "referenceAm": "2ኛ ጢሞቴዎስ 1፥7",
+      "textEn": "For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind.",
+      "textAm": "እግዚአብሔር የኃይልና የፍቅር ራስንም የመግዛት መንፈስ እንጂ የፍርሃት መንፈስ አልሰጠንምና።",
+      "verified": false
+    },
+    {
+      "reference": "Hebrews 11:1",
+      "referenceAm": "ዕብራውያን 11፥1",
+      "textEn": "Now faith is the substance of things hoped for, the evidence of things not seen.",
+      "textAm": "እምነትም ተስፋ ስለምናደርገው ነገር የሚያስረግጥ፥ የማናየውንም ነገር የሚያስረዳ ነው።",
+      "verified": false
+    },
+    {
+      "reference": "James 1:5",
+      "referenceAm": "ያዕቆብ 1፥5",
+      "textEn": "If any of you lack wisdom, let him ask of God, that giveth to all men liberally, and upbraideth not; and it shall be given him.",
+      "textAm": "ከእናንተ ግን ማንም ጥበብ ቢጎድለው፥ ሳይነቅፍ በልግስና ለሁሉ የሚሰጠውን እግዚአብሔርን ይለምን፥ ለእርሱም ይሰጠዋል።",
+      "verified": false
+    },
+    {
+      "reference": "1 Peter 5:7",
+      "referenceAm": "1ኛ ጴጥሮስ 5፥7",
+      "textEn": "Casting all your care upon him; for he careth for you.",
+      "textAm": "እርሱ ስለ እናንተ ያስባልና የሚያስጨንቃችሁን ሁሉ በእርሱ ላይ ጣሉት።",
+      "verified": false
+    },
+    {
+      "reference": "Psalm 119:105",
+      "referenceAm": "መዝሙር 119፥105",
+      "textEn": "Thy word is a lamp unto my feet, and a light unto my path.",
+      "textAm": "ሕግህ ለእግሬ መብራት፥ ለመንገዴም ብርሃን ነው።",
+      "verified": false
+    },
+    {
+      "reference": "Proverbs 18:10",
+      "referenceAm": "ምሳሌ 18፥10",
+      "textEn": "The name of the LORD is a strong tower: the righteous runneth into it, and is safe.",
+      "textAm": "የእግዚአብሔር ስም የጸና ግንብ ነው፤ ጻድቅ ወደ እርሱ ሮጦ ይድናል።",
+      "verified": false
+    },
+    {
+      "reference": "Lamentations 3:22",
+      "referenceAm": "ሰቆቃወ ኤርምያስ 3፥22",
+      "textEn": "It is of the LORD's mercies that we are not consumed, because his compassions fail not.",
+      "textAm": "ምሕረቱ አያልቅምና ያለ መጥፋታችን የእግዚአብሔር ቸርነት ነው።",
+      "verified": false
+    },
+    {
+      "reference": "John 16:33",
+      "referenceAm": "ዮሐንስ 16፥33",
+      "textEn": "These things I have spoken unto you, that in me ye might have peace. In the world ye shall have tribulation: but be of good cheer; I have overcome the world.",
+      "textAm": "በእኔ ሰላም እንዲሆንላችሁ ይህን ተናግሬአችኋለሁ። በዓለም ሳላችሁ መከራ አለባችሁ፤ ነገር ግን አይዞአችሁ፤ እኔ ዓለምን አሸንፌዋለሁ።",
+      "verified": false
+    }
+  ]
+}

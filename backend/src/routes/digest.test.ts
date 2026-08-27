@@ -11,6 +11,7 @@ import {
   type DigestStore,
 } from '../domain/digestGeneration.js';
 import { createRateLimiter } from '../domain/rateLimiter.js';
+import { FALLBACK_VERSE } from '../domain/verse.js';
 import { captureLogs, startTestServer, type TestServer } from '../testing/httpTestServer.js';
 
 /**
@@ -95,6 +96,7 @@ async function serve(deps: { digests: DigestStore; digestGeneration: DigestGener
       usersRepository,
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
       now: NOW,
+      verses: { verseFor: () => FALLBACK_VERSE },
       ...deps,
     }),
   );

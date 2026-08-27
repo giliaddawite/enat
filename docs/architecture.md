@@ -18,11 +18,11 @@ flowchart LR
         API["/v1/ API<br/>ID-token auth, rate limiting"]
         SYNC["Gmail ingestion<br/>historyId incremental sync"]
         PIPE["Summarization pipeline<br/>batched, cached, capped"]
-        VS["Verse service"]
+        VS["Verse service<br/>bundled rotation, in-memory"]
     end
 
     subgraph Google["Google Cloud"]
-        FS[("Firestore<br/>users · digests · summary cache · verses")]
+        FS[("Firestore<br/>users · digests · summary cache")]
         SM[("Secret Manager / KMS<br/>encrypted refresh tokens")]
         SCHED["Cloud Scheduler → Pub/Sub<br/>daily 6:30 AM trigger"]
     end
@@ -40,7 +40,6 @@ flowchart LR
     PIPE -- "one call per batch" --> CLAUDE
     SYNC -.-> SM
     PIPE <--> FS
-    VS --> FS
     API <--> FS
 ```
 
@@ -145,7 +144,17 @@ JWKS for signature/audience/expiry and rate-limited per user (TICKET-102).
   pre-built document in <300ms p95. ETag support lets the app skip unchanged
   downloads.
 - **Verse service** (TICKET-106) — `GET /v1/verse/today` from a curated
-  365-entry rotation in Firestore, 24h edge cache, hard-coded fallback verse.
+  rotation checked into the repo (`backend/src/data/verses.json`) and served
+  from memory — a few hundred KB of static bilingual text needs no Firestore
+  collection and no I/O on the read path. In production only entries the
+  maintainer has marked `verified: true` are served; until any are, the
+  hardcoded fallback verse stands in. `Cache-Control: public` with a max-age
+  counting down to UTC midnight, plus ETag (actual edge caching engages when a
+  CDN/LB fronts the service). The rotation deliberately advances at **UTC**
+  midnight — the same day boundary the digest uses — so the verse changes
+  around 8 PM ET; accepted for consistency and shared-cache correctness
+  (flagged to the maintainer). Licensing and verification status:
+  `docs/verse-licensing.md`.
 
 ### Data (Firestore)
 
@@ -154,7 +163,10 @@ JWKS for signature/audience/expiry and rate-limited per user (TICKET-102).
 | `users` | uid, email, locale, reference to encrypted refresh token | 102 |
 | `digests` | date, userId, sections[], generatedAt, emailCount | 105 |
 | summary cache | per-`messageId` category + Amharic summary | 104 |
-| `verses` | 365-entry curated rotation, Amharic + English | 106 |
+
+The curated verse rotation (Amharic + English, TICKET-106) is deliberately
+*not* in Firestore: it ships inside the container image and is validated at
+boot.
 
 Refresh tokens live in Secret Manager or as KMS-encrypted Firestore fields —
 never plaintext (TICKET-102).

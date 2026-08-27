@@ -5,6 +5,7 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
+import { FALLBACK_VERSE, type DailyVerseSource } from './domain/verse.js';
 import { captureLogs, startTestServer, type TestServer } from './testing/httpTestServer.js';
 
 let server: TestServer | undefined;
@@ -47,6 +48,10 @@ const stubDigestGeneration: DigestGenerationService = {
   generate: () => Promise.reject(new Error('not exercised by these tests')),
 };
 
+const stubVerses: DailyVerseSource = {
+  verseFor: () => FALLBACK_VERSE,
+};
+
 async function serve() {
   const logs = captureLogs();
   const config = loadConfig({ NODE_ENV: 'test' });
@@ -59,6 +64,7 @@ async function serve() {
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
       digests: stubDigests,
       digestGeneration: stubDigestGeneration,
+      verses: stubVerses,
     }),
   );
   return { server, logs };
@@ -125,13 +131,23 @@ describe('the assembled app', () => {
   it('routes an authenticated /v1/ request past auth to the 404 of a not-yet-built route', async () => {
     const { server: running } = await serve();
 
+    const response = await running.fetch('/v1/not-a-route', {
+      headers: { Authorization: 'Bearer accepted-token' },
+    });
+
+    // No such route exists; the point is auth passed and routing ran.
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'not_found' } });
+  });
+
+  it('serves GET /v1/verse/today once authenticated (see routes/verse.test.ts for the full contract)', async () => {
+    const { server: running } = await serve();
+
     const response = await running.fetch('/v1/verse/today', {
       headers: { Authorization: 'Bearer accepted-token' },
     });
 
-    // No /v1/verse route exists yet (TICKET-106); the point is auth passed and routing ran.
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ error: { code: 'not_found' } });
+    expect(response.status).toBe(200);
   });
 
   it('serves GET /v1/digest once authenticated (see routes/digest.test.ts for the full contract)', async () => {

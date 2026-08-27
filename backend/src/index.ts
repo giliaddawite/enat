@@ -10,6 +10,7 @@ import { createGoogleSecretManagerClient } from './adapters/secretManagerClient.
 import { createSecretManagerRefreshTokenStore } from './adapters/refreshTokenStore.js';
 import { createFirestoreSummaryCacheStore } from './adapters/summaryCacheRepository.js';
 import { createFirestoreUsersRepository } from './adapters/usersRepository.js';
+import { loadBundledVerses } from './adapters/verseDataset.js';
 import { createApp, type AppDependencies } from './app.js';
 import { loadConfig, type Config } from './config.js';
 import { toDateKey } from './domain/digest.js';
@@ -22,6 +23,12 @@ import { createDigestSummarizer } from './domain/digestPipeline.js';
 import { createGmailSyncService } from './domain/gmailSync.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
 import { PROMPT_VERSION } from './domain/summarizationPrompt.js';
+import {
+  createVerseRotation,
+  FALLBACK_VERSE,
+  servableVerses,
+  type DailyVerseSource,
+} from './domain/verse.js';
 import type { User } from './domain/user.js';
 import { createLogger, type Logger } from './logging/logger.js';
 
@@ -67,8 +74,34 @@ function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
     }),
     digests,
     digestGeneration,
+    verses: buildVerseSource(config, logger),
     ...(digestGenerationPush ? { digestGenerationPush } : {}),
   };
+}
+
+/**
+ * The daily verse rotation (TICKET-106). Validated here, at boot: a malformed dataset
+ * entry fails the deploy's health check loudly rather than surfacing as a broken verse
+ * card at some point mid-year.
+ *
+ * Production serves only entries the maintainer has marked `verified: true` — unreviewed
+ * Amharic scripture must never reach the user (CLAUDE.md: Amharic text changes get human
+ * review). Until at least one entry is verified, that means production serves the
+ * hardcoded fallback verse every day; the warning below fires once at boot, not per
+ * request, so the state is visible without being noisy. Non-production keeps every entry
+ * so dev and tests exercise the real rotation.
+ */
+function buildVerseSource(config: Config, logger: Logger): DailyVerseSource {
+  const verses = servableVerses(loadBundledVerses(), {
+    requireVerified: config.environment === 'production',
+  });
+  if (verses.length === 0) {
+    logger.warn('verse dataset has no verified entries; serving only the fallback verse', {
+      environment: config.environment,
+    });
+    return { verseFor: () => FALLBACK_VERSE };
+  }
+  return createVerseRotation(verses);
 }
 
 /**
