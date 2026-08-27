@@ -3,13 +3,18 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- allowBackup stays off so Auto Backup can never ship cached email digests or
+         tokens to Drive once the Room cache (TICKET-203) exists. Re-enable only with
+         explicit dataExtractionRules that exclude the database and any credentials.
+         usesCleartextTraffic is defense-in-depth: every backend URL is https. -->
     <application
         android:name=".EnatApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Enat">
+        android:theme="@style/Theme.Enat"
+        android:usesCleartextTraffic="false">
 
         <!-- Crash reporting never starts on its own: EnatApplication enables it
              explicitly, and only in release builds. -->
