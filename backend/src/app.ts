@@ -4,6 +4,7 @@ import type { UsersRepository } from './adapters/usersRepository.js';
 import type { Config } from './config.js';
 import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
 import type { RateLimiter } from './domain/rateLimiter.js';
+import type { DailyVerseSource } from './domain/verse.js';
 import type { Logger } from './logging/logger.js';
 import { authenticate } from './http/auth.js';
 import { errorHandler } from './http/errorHandler.js';
@@ -15,6 +16,7 @@ import { requestLogging } from './http/requestLogging.js';
 import { generateDigest, getDigest } from './routes/digest.js';
 import { createDigestGenerationPushHandler } from './routes/digestGenerationPush.js';
 import { healthz } from './routes/health.js';
+import { getVerseToday } from './routes/verse.js';
 
 export interface AppDependencies {
   readonly config: Config;
@@ -24,6 +26,14 @@ export interface AppDependencies {
   readonly rateLimiter: RateLimiter;
   readonly digests: DigestStore;
   readonly digestGeneration: DigestGenerationService;
+  /**
+   * The daily verse rotation (TICKET-106), bundled with the build — see
+   * `adapters/verseDataset.ts`. Kept under the authenticated `v1` router deliberately:
+   * CLAUDE.md's "auth on every request" beats shaving one JWKS check off a route that is
+   * already client-cached for 24h, and `Cache-Control: public` still permits a future CDN
+   * to cache the response despite the Authorization header (RFC 9111 §3.5).
+   */
+  readonly verses: DailyVerseSource;
   /** Injected clock; only the calendar date reaches the digest routes. Defaults to the
    * real clock so production wiring never has to pass it explicitly. */
   readonly now?: () => Date;
@@ -58,6 +68,7 @@ export function createApp(dependencies: AppDependencies): Express {
     rateLimiter,
     digests,
     digestGeneration,
+    verses,
     digestGenerationPush,
   } = dependencies;
   const now = dependencies.now ?? (() => new Date());
@@ -81,6 +92,7 @@ export function createApp(dependencies: AppDependencies): Express {
   const digestRouteDependencies = { digests, generation: digestGeneration, now, logger };
   v1.get('/digest', getDigest(digestRouteDependencies));
   v1.post('/digest/generate', generateDigest(digestRouteDependencies));
+  v1.get('/verse/today', getVerseToday({ verses, now }));
   app.use('/v1', v1);
 
   // Not behind /v1's Google end-user auth: the caller is Pub/Sub, not the app, and its own

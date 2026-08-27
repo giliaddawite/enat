@@ -10,6 +10,7 @@ import { createGoogleSecretManagerClient } from './adapters/secretManagerClient.
 import { createSecretManagerRefreshTokenStore } from './adapters/refreshTokenStore.js';
 import { createFirestoreSummaryCacheStore } from './adapters/summaryCacheRepository.js';
 import { createFirestoreUsersRepository } from './adapters/usersRepository.js';
+import { loadBundledVerses } from './adapters/verseDataset.js';
 import { createApp, type AppDependencies } from './app.js';
 import { loadConfig, type Config } from './config.js';
 import { toDateKey } from './domain/digest.js';
@@ -22,6 +23,7 @@ import { createDigestSummarizer } from './domain/digestPipeline.js';
 import { createGmailSyncService } from './domain/gmailSync.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
 import { PROMPT_VERSION } from './domain/summarizationPrompt.js';
+import { createVerseRotation } from './domain/verse.js';
 import type { User } from './domain/user.js';
 import { createLogger, type Logger } from './logging/logger.js';
 
@@ -67,6 +69,9 @@ function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
     }),
     digests,
     digestGeneration,
+    // Validated here, at boot: a malformed dataset entry fails the deploy's health check
+    // loudly rather than surfacing as a broken verse card at some point mid-year.
+    verses: createVerseRotation(loadBundledVerses()),
     ...(digestGenerationPush ? { digestGenerationPush } : {}),
   };
 }
