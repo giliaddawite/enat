@@ -61,9 +61,10 @@ describe('createGoogleAuthCodeExchanger', () => {
     expect(body.has('redirect_uri')).toBe(false);
   });
 
-  it('returns the refresh token and the granted scopes split from the scope field', async () => {
+  it('returns the refresh token, granted scopes, and the id_token binding the grant', async () => {
     const { exchange } = buildExchanger([
-      () => successResponse({ refresh_token: 'refresh-1', scope: SCOPES }),
+      () =>
+        successResponse({ refresh_token: 'refresh-1', scope: SCOPES, id_token: 'jwt-id-token' }),
     ]);
 
     await expect(exchange('code')).resolves.toEqual({
@@ -72,13 +73,18 @@ describe('createGoogleAuthCodeExchanger', () => {
         'https://www.googleapis.com/auth/gmail.readonly',
         'https://www.googleapis.com/auth/gmail.modify',
       ],
+      idToken: 'jwt-id-token',
     });
   });
 
-  it('reports a missing refresh_token as null and a missing scope as no scopes', async () => {
+  it('reports missing refresh_token, scope, and id_token as null/empty rather than failing', async () => {
     const { exchange } = buildExchanger([() => successResponse({ access_token: 'unused' })]);
 
-    await expect(exchange('code')).resolves.toEqual({ refreshToken: null, grantedScopes: [] });
+    await expect(exchange('code')).resolves.toEqual({
+      refreshToken: null,
+      grantedScopes: [],
+      idToken: null,
+    });
   });
 
   it('maps invalid_grant to a GmailConsentRejectedError the route can answer 400 with', async () => {

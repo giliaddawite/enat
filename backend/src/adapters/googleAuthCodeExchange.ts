@@ -17,10 +17,13 @@ import { GOOGLE_TOKEN_ENDPOINT, readOAuthErrorCode } from './googleTokenEndpoint
 
 /** Only the fields consent consumes. `refresh_token` is absent unless the app requested
  * `access_type=offline` (or on a repeat consent without `prompt=consent`); `scope` is the
- * space-delimited list of scopes the user actually granted. */
+ * space-delimited list of scopes the user actually granted; `id_token` asserts which
+ * Google account granted the code — the consent service verifies it and rejects a grant
+ * whose subject is not the authenticated user. */
 const CodeExchangeResponse = z.object({
   refresh_token: z.string().min(1).optional(),
   scope: z.string().optional(),
+  id_token: z.string().min(1).optional(),
 });
 
 export interface GoogleAuthCodeExchangerOptions {
@@ -90,6 +93,7 @@ export function createGoogleAuthCodeExchanger(
     return {
       refreshToken: parsed.data.refresh_token ?? null,
       grantedScopes: parsed.data.scope?.split(' ').filter((scope) => scope.length > 0) ?? [],
+      idToken: parsed.data.id_token ?? null,
     };
   };
 }

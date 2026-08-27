@@ -19,6 +19,8 @@ import { requireUser } from '../http/requireUser.js';
  *   400 `invalid_grant`       Google refused the code — restart the flow for a fresh one
  *   400 `no_refresh_token`    no refresh token came back — re-prompt with forced consent
  *   400 `insufficient_scope`  a required Gmail scope was unchecked — re-prompt
+ *   400 `account_mismatch`    the grant is not bound to the signed-in Google account —
+ *                             re-run consent signed in as the same account
  *   502 `bad_gateway`         Google's token endpoint failed — retry later, keep the code flow
  *
  * Mounted on the `v1` router in `app.ts`, so `authenticate` has already resolved `req.user`.

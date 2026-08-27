@@ -91,6 +91,10 @@ async function serve(tokenEndpoint: typeof fetch): Promise<Harness> {
       clientSecret: 'client-secret',
       fetch: tokenEndpoint,
     }),
+    // Stands in for real JWT verification: asserts uid-1 for the fixture id_token, null
+    // (does not verify) for anything else — the shape index.ts's wiring produces.
+    verifyConsentIdToken: (idToken) =>
+      Promise.resolve(idToken === 'id-token-for-uid-1' ? 'uid-1' : null),
     refreshTokens: { put },
     users: { setRefreshTokenRef },
     logger: logs.logger,
@@ -136,7 +140,11 @@ function post(running: TestServer, body: string | undefined, token = 'accepted-t
 describe('POST /v1/auth/gmail-consent', () => {
   it('exchanges the code, stores the refresh token, links the ref, answers 204 with no body', async () => {
     const harness = await serve(
-      successExchange({ refresh_token: 'refresh-token-secret', scope: REQUIRED_SCOPES }),
+      successExchange({
+        refresh_token: 'refresh-token-secret',
+        scope: REQUIRED_SCOPES,
+        id_token: 'id-token-for-uid-1',
+      }),
     );
 
     const response = await post(harness.server, JSON.stringify({ authCode: 'one-time-code' }));
@@ -201,8 +209,39 @@ describe('POST /v1/auth/gmail-consent', () => {
     expect(harness.put).not.toHaveBeenCalled();
   });
 
+  it("answers 400 account_mismatch when the grant's id_token belongs to another account", async () => {
+    const harness = await serve(
+      successExchange({
+        refresh_token: 'refresh-token-secret',
+        scope: REQUIRED_SCOPES,
+        id_token: 'id-token-for-someone-else',
+      }),
+    );
+
+    const response = await post(harness.server, JSON.stringify({ authCode: 'code' }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: 'account_mismatch' } });
+    expect(harness.put).not.toHaveBeenCalled();
+    expect(harness.setRefreshTokenRef).not.toHaveBeenCalled();
+  });
+
+  it('answers 400 account_mismatch when the exchange carries no id_token at all', async () => {
+    const harness = await serve(
+      successExchange({ refresh_token: 'refresh-token-secret', scope: REQUIRED_SCOPES }),
+    );
+
+    const response = await post(harness.server, JSON.stringify({ authCode: 'code' }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: 'account_mismatch' } });
+    expect(harness.put).not.toHaveBeenCalled();
+  });
+
   it('answers 400 no_refresh_token when the exchange carries no refresh token', async () => {
-    const harness = await serve(successExchange({ scope: REQUIRED_SCOPES }));
+    const harness = await serve(
+      successExchange({ scope: REQUIRED_SCOPES, id_token: 'id-token-for-uid-1' }),
+    );
 
     const response = await post(harness.server, JSON.stringify({ authCode: 'code' }));
 
@@ -216,6 +255,7 @@ describe('POST /v1/auth/gmail-consent', () => {
       successExchange({
         refresh_token: 'refresh-token-secret',
         scope: 'https://www.googleapis.com/auth/gmail.readonly',
+        id_token: 'id-token-for-uid-1',
       }),
     );
 
@@ -255,7 +295,11 @@ describe('POST /v1/auth/gmail-consent', () => {
 
   it('never writes the auth code or any token into a log entry', async () => {
     const harness = await serve(
-      successExchange({ refresh_token: 'refresh-token-secret', scope: REQUIRED_SCOPES }),
+      successExchange({
+        refresh_token: 'refresh-token-secret',
+        scope: REQUIRED_SCOPES,
+        id_token: 'id-token-for-uid-1',
+      }),
     );
 
     await post(harness.server, JSON.stringify({ authCode: 'auth-code-secret' }));
@@ -264,5 +308,7 @@ describe('POST /v1/auth/gmail-consent', () => {
     const logged = JSON.stringify(harness.logs.entries);
     expect(logged).not.toContain('auth-code-secret');
     expect(logged).not.toContain('refresh-token-secret');
+    // The id_token is a JWT carrying the account's email — it must not reach logs either.
+    expect(logged).not.toContain('id-token-for-uid-1');
   });
 });

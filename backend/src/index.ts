@@ -9,7 +9,11 @@ import {
 import { createGmailApiClient } from './adapters/gmailApiClient.js';
 import { createGoogleAuthCodeExchanger } from './adapters/googleAuthCodeExchange.js';
 import { createFirestoreGmailSyncStateStore } from './adapters/gmailSyncStateRepository.js';
-import { createGoogleIdTokenVerifier, type IdTokenVerifier } from './adapters/idTokenVerifier.js';
+import {
+  createGoogleIdTokenVerifier,
+  IdTokenRejectedError,
+  type IdTokenVerifier,
+} from './adapters/idTokenVerifier.js';
 import { createGoogleSecretManagerClient } from './adapters/secretManagerClient.js';
 import {
   createSecretManagerRefreshTokenStore,
@@ -104,6 +108,9 @@ interface GmailOAuthAdapters {
   readonly refreshTokenStore: RefreshTokenStore;
   readonly accessTokens: GmailAccessTokenProvider;
   readonly exchangeAuthCode: (authCode: string) => Promise<AuthCodeGrant>;
+  /** See `GmailConsentDependencies.verifyConsentIdToken`: the subject the exchange's
+   * id_token asserts, or `null` for a token that does not verify. */
+  readonly verifyConsentIdToken: (idToken: string) => Promise<string | null>;
 }
 
 function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdapters | null {
@@ -119,6 +126,12 @@ function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdap
     createGoogleSecretManagerClient(config.gcpProjectId),
     { logger },
   );
+  // Bound to the OAuth client the exchange itself uses — the id_token in a code-exchange
+  // response carries that client as its `aud`, which may differ from the inbound-request
+  // audience list (GOOGLE_OAUTH_AUDIENCE).
+  const consentIdTokenVerifier = createGoogleIdTokenVerifier({
+    audience: [config.googleOAuthClientId],
+  });
   return {
     refreshTokenStore,
     accessTokens: createGmailAccessTokenProvider({
@@ -130,6 +143,17 @@ function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdap
       clientId: config.googleOAuthClientId,
       clientSecret: config.googleOAuthClientSecret,
     }),
+    verifyConsentIdToken: async (idToken) => {
+      try {
+        return (await consentIdTokenVerifier.verify(idToken)).googleUserId;
+      } catch (error) {
+        if (error instanceof IdTokenRejectedError) {
+          // An invalid token is the client's problem (account_mismatch), not an outage.
+          return null;
+        }
+        throw error;
+      }
+    },
   };
 }
 
@@ -148,6 +172,7 @@ function buildGmailConsentService(
   }
   return createGmailConsentService({
     exchangeAuthCode: gmailOAuth.exchangeAuthCode,
+    verifyConsentIdToken: gmailOAuth.verifyConsentIdToken,
     refreshTokens: gmailOAuth.refreshTokenStore,
     users: usersRepository,
     logger,
