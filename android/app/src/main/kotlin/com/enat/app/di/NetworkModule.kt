@@ -1,6 +1,7 @@
 package com.enat.app.di
 
 import com.enat.app.BuildConfig
+import com.enat.app.data.auth.AuthApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -33,8 +34,7 @@ object NetworkModule {
             .build()
 
     // BuildConfig.API_BASE_URL already ends in /v1/ — the app never calls
-    // unversioned paths. Service interfaces register here in later tickets
-    // (TICKET-202 onward).
+    // unversioned paths.
     @Provides
     @Singleton
     fun provideRetrofit(
@@ -46,4 +46,8 @@ object NetworkModule {
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
+
+    @Provides
+    @Singleton
+    fun provideAuthApi(retrofit: Retrofit): AuthApi = retrofit.create(AuthApi::class.java)
 }
