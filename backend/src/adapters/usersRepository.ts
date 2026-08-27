@@ -7,6 +7,10 @@ export interface UsersRepository {
     readonly googleUserId: string;
     readonly email: string;
   }): Promise<User>;
+  /** Looks up a user by uid without creating one — for callers that already have a uid
+   * from somewhere other than a freshly-verified ID token (TICKET-105's Pub/Sub push
+   * handler, given a uid in the scheduled message rather than a bearer token). */
+  getById(uid: string): Promise<User | null>;
 }
 
 /**
@@ -77,6 +81,14 @@ export function createFirestoreUsersRepository(
         const created = await ref.get();
         return reconcileEmail(ref, parseUserDocument(created.data()), identity.email);
       }
+    },
+
+    async getById(uid) {
+      const snapshot = await users.doc(uid).get();
+      if (!snapshot.exists) {
+        return null;
+      }
+      return parseUserDocument(snapshot.data());
     },
   };
 }

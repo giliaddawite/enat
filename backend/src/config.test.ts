@@ -31,6 +31,40 @@ describe('loadConfig', () => {
     });
   });
 
+  it('reads the digest-generation config, all of it optional even in production', () => {
+    const config = loadConfig({
+      NODE_ENV: 'production',
+      GCP_PROJECT_ID: 'enat-staging',
+      GOOGLE_OAUTH_AUDIENCE: 'android-client-id.apps.googleusercontent.com',
+      CLAUDE_API_KEY: 'sk-ant-example',
+      GOOGLE_OAUTH_CLIENT_ID: 'client-id.apps.googleusercontent.com',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'client-secret',
+      PUBSUB_PUSH_AUDIENCE: 'https://enat-api-staging.example.run.app/internal/digest-generate',
+      PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL:
+        'enat-scheduler@enat-staging.iam.gserviceaccount.com',
+    });
+
+    expect(config.claudeApiKey).toBe('sk-ant-example');
+    expect(config.googleOAuthClientId).toBe('client-id.apps.googleusercontent.com');
+    expect(config.googleOAuthClientSecret).toBe('client-secret');
+    expect(config.pubSubPushAudience).toBe(
+      'https://enat-api-staging.example.run.app/internal/digest-generate',
+    );
+    expect(config.pubSubInvokerServiceAccountEmail).toBe(
+      'enat-scheduler@enat-staging.iam.gserviceaccount.com',
+    );
+  });
+
+  it('boots in production with the digest-generation config entirely unset', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        GCP_PROJECT_ID: 'enat-staging',
+        GOOGLE_OAUTH_AUDIENCE: 'android-client-id.apps.googleusercontent.com',
+      }),
+    ).not.toThrow();
+  });
+
   it('splits GOOGLE_OAUTH_AUDIENCE on commas to support rotating in a new client id', () => {
     const config = loadConfig({
       NODE_ENV: 'production',

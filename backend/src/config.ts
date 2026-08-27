@@ -18,6 +18,32 @@ export interface Config {
   readonly googleOAuthAudience?: readonly string[];
   /** Requests per user per 60s window before `429`. Defaults to the ticket's 60 req/min. */
   readonly rateLimitPerMinute: number;
+  /**
+   * Claude API key for the digest summarizer (TICKET-104/105). Optional even in production:
+   * generation is one feature of this service, not a boot-time requirement, so a service
+   * deployed before this secret is provisioned still serves `/healthz` and reads of
+   * already-generated digests — `POST /v1/digest/generate` and the scheduled job answer a
+   * clear 5xx instead.
+   */
+  readonly claudeApiKey?: string;
+  /**
+   * The Gmail OAuth client Google issued the user's refresh token to (TICKET-202) — needed
+   * to mint access tokens from it. Optional for the same reason as `claudeApiKey`: not
+   * required to boot, only to generate a digest.
+   */
+  readonly googleOAuthClientId?: string;
+  readonly googleOAuthClientSecret?: string;
+  /**
+   * Expected `aud` claim on the OIDC token Pub/Sub attaches to a push request (its own push
+   * subscription's configured audience, normally the push endpoint's URL) — see
+   * `http/pubsubPush.ts`. Optional: absent wherever the push subscription has not been
+   * provisioned, in which case `/internal/digest-generate` is not mounted at all.
+   */
+  readonly pubSubPushAudience?: string;
+  /** Expected `email` claim on that same token — the one service account Pub/Sub pushes
+   * are trusted from. Required alongside `pubSubPushAudience`; either without the other
+   * leaves the push endpoint unable to verify anything, so both are treated as unset. */
+  readonly pubSubInvokerServiceAccountEmail?: string;
 }
 
 /**
@@ -93,6 +119,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     problems,
   );
 
+  const claudeApiKey = nonBlank(env.CLAUDE_API_KEY);
+  const googleOAuthClientId = nonBlank(env.GOOGLE_OAUTH_CLIENT_ID);
+  const googleOAuthClientSecret = nonBlank(env.GOOGLE_OAUTH_CLIENT_SECRET);
+  const pubSubPushAudience = nonBlank(env.PUBSUB_PUSH_AUDIENCE);
+  const pubSubInvokerServiceAccountEmail = nonBlank(env.PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL);
+
   if (problems.length > 0) {
     throw new ConfigError(problems);
   }
@@ -104,7 +136,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     rateLimitPerMinute,
     ...(gcpProjectId ? { gcpProjectId } : {}),
     ...(googleOAuthAudience ? { googleOAuthAudience } : {}),
+    ...(claudeApiKey ? { claudeApiKey } : {}),
+    ...(googleOAuthClientId ? { googleOAuthClientId } : {}),
+    ...(googleOAuthClientSecret ? { googleOAuthClientSecret } : {}),
+    ...(pubSubPushAudience ? { pubSubPushAudience } : {}),
+    ...(pubSubInvokerServiceAccountEmail ? { pubSubInvokerServiceAccountEmail } : {}),
   };
+}
+
+/** `undefined` for an unset or whitespace-only variable — the shared shape every optional
+ * string-valued config field in this file uses. */
+function nonBlank(raw: string | undefined): string | undefined {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /** Comma separated so a client ID rotation can add the new value before removing the old. */

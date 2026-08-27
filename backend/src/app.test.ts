@@ -3,6 +3,7 @@ import { IdTokenRejectedError, type IdTokenVerifier } from './adapters/idTokenVe
 import type { UsersRepository } from './adapters/usersRepository.js';
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
+import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
 import { createRateLimiter } from './domain/rateLimiter.js';
 import { captureLogs, startTestServer, type TestServer } from './testing/httpTestServer.js';
 
@@ -34,6 +35,16 @@ const stubUsersRepository: UsersRepository = {
       locale: 'am',
       refreshTokenRef: null,
     }),
+  getById: () => Promise.resolve(null),
+};
+
+const stubDigests: DigestStore = {
+  get: () => Promise.resolve(null),
+  save: () => Promise.resolve(),
+};
+
+const stubDigestGeneration: DigestGenerationService = {
+  generate: () => Promise.reject(new Error('not exercised by these tests')),
 };
 
 async function serve() {
@@ -46,6 +57,8 @@ async function serve() {
       idTokenVerifier: stubVerifier,
       usersRepository: stubUsersRepository,
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
+      digests: stubDigests,
+      digestGeneration: stubDigestGeneration,
     }),
   );
   return { server, logs };
@@ -112,12 +125,24 @@ describe('the assembled app', () => {
   it('routes an authenticated /v1/ request past auth to the 404 of a not-yet-built route', async () => {
     const { server: running } = await serve();
 
+    const response = await running.fetch('/v1/verse/today', {
+      headers: { Authorization: 'Bearer accepted-token' },
+    });
+
+    // No /v1/verse route exists yet (TICKET-106); the point is auth passed and routing ran.
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'not_found' } });
+  });
+
+  it('serves GET /v1/digest once authenticated (see routes/digest.test.ts for the full contract)', async () => {
+    const { server: running } = await serve();
+
     const response = await running.fetch('/v1/digest', {
       headers: { Authorization: 'Bearer accepted-token' },
     });
 
-    // No /v1 route exists yet (TICKET-105/106); the point is auth passed and routing ran.
     expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: 'digest_not_found' } });
   });
 
   it('leaves /healthz reachable without a token for Cloud Run probes', async () => {
