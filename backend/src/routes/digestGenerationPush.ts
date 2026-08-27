@@ -1,6 +1,10 @@
 import type { RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { GmailNotConnectedError, type DigestGenerationService } from '../domain/digestGeneration.js';
+import {
+  GmailNotConnectedError,
+  GmailReconnectRequiredError,
+  type DigestGenerationService,
+} from '../domain/digestGeneration.js';
 import type { User } from '../domain/user.js';
 import type { Logger } from '../logging/logger.js';
 
@@ -16,6 +20,8 @@ import type { Logger } from '../logging/logger.js';
  *   a transient fault)
  * - a uid naming no known user (a stale or hand-edited scheduler payload)
  * - a user who has not completed the Gmail consent flow (TICKET-202)
+ * - a user whose Gmail grant was revoked (`invalid_grant`) — only re-running consent on the
+ *   device fixes that, so redelivery would just burn quota until the message expires
  *
  * Retried (5xx, via the global error handler): anything else — a Gmail, Claude or Firestore
  * hiccup is exactly what Pub/Sub's backoff exists for.
@@ -69,6 +75,11 @@ async function handle(
   } catch (error) {
     if (error instanceof GmailNotConnectedError) {
       deps.logger?.warn('digest generation push skipped: user has not connected Gmail');
+      res.status(200).end();
+      return;
+    }
+    if (error instanceof GmailReconnectRequiredError) {
+      deps.logger?.warn('digest generation push skipped: Gmail grant revoked, reconnect required');
       res.status(200).end();
       return;
     }

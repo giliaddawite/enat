@@ -29,6 +29,19 @@ export class GmailNotConnectedError extends Error {
   readonly uid: string;
 }
 
+/** Thrown when Google answers a refresh-token exchange with `invalid_grant` — the stored
+ * grant was revoked (or has expired) and no retry can fix it. The sibling of
+ * `GmailNotConnectedError`: that one means consent never happened, this one means consent
+ * happened and was withdrawn. Callers map it to the stable `gmail_reconnect_required`
+ * client code so the app shows its "reconnect Gmail" card (TICKET-202) instead of treating
+ * the failure as transient. */
+export class GmailReconnectRequiredError extends Error {
+  constructor() {
+    super('stored Gmail refresh token was rejected; the user must reconnect Gmail');
+    this.name = 'GmailReconnectRequiredError';
+  }
+}
+
 /** One user's Gmail sync + summarizer, bound to their stored refresh token. Building this
  * is the composition root's job (real adapters in `index.ts`, fakes in tests) — this module
  * only calls the two methods it needs. */

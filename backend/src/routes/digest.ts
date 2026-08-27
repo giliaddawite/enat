@@ -2,6 +2,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import { computeDigestETag, toDateKey, type Digest } from '../domain/digest.js';
 import {
   GmailNotConnectedError,
+  GmailReconnectRequiredError,
   type DigestGenerationService,
   type DigestStore,
 } from '../domain/digestGeneration.js';
@@ -70,6 +71,13 @@ async function handleGenerate(
     if (error instanceof GmailNotConnectedError) {
       throw new HttpError(409, 'Connect Gmail before generating a digest.', {
         code: 'gmail_not_connected',
+      });
+    }
+    if (error instanceof GmailReconnectRequiredError) {
+      // Distinguishable from `gmail_not_connected` on purpose: the app renders a "Gmail
+      // access was revoked — reconnect" card for this one (TICKET-202), not first-run setup.
+      throw new HttpError(409, 'Gmail access is no longer valid. Reconnect Gmail to continue.', {
+        code: 'gmail_reconnect_required',
       });
     }
     throw error;

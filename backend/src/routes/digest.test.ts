@@ -6,6 +6,7 @@ import { loadConfig } from '../config.js';
 import type { Digest } from '../domain/digest.js';
 import {
   GmailNotConnectedError,
+  GmailReconnectRequiredError,
   type DigestGenerationResult,
   type DigestGenerationService,
   type DigestStore,
@@ -180,6 +181,18 @@ describe('POST /v1/digest/generate', () => {
 
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: { code: 'gmail_not_connected' } });
+  });
+
+  it('answers 409 gmail_reconnect_required when the stored Gmail grant was revoked', async () => {
+    const running = await serve({
+      digests: fakeDigests(null),
+      digestGeneration: fakeGeneration(() => Promise.reject(new GmailReconnectRequiredError())),
+    });
+
+    const response = await running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: 'gmail_reconnect_required' } });
   });
 
   it('answers 500 without leaking detail when generation fails unexpectedly', async () => {

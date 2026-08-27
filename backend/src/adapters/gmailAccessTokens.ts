@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { GmailReconnectRequiredError } from '../domain/digestGeneration.js';
+import { GOOGLE_TOKEN_ENDPOINT, readOAuthErrorCode } from './googleTokenEndpoint.js';
 import type { RefreshTokenStore } from './refreshTokenStore.js';
 
 /**
@@ -11,8 +13,6 @@ import type { RefreshTokenStore } from './refreshTokenStore.js';
 export interface GmailAccessTokenProvider {
   getAccessToken(refreshTokenRef: string): Promise<string>;
 }
-
-const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
 /** Refreshed a minute early so a token never expires mid-sync. */
 const EXPIRY_SAFETY_MARGIN_MS = 60_000;
@@ -49,7 +49,7 @@ export function createGmailAccessTokenProvider(
       }
 
       const refreshToken = await options.refreshTokenStore.get(refreshTokenRef);
-      const response = await fetchImpl(TOKEN_ENDPOINT, {
+      const response = await fetchImpl(GOOGLE_TOKEN_ENDPOINT, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -60,8 +60,14 @@ export function createGmailAccessTokenProvider(
         }).toString(),
       });
       if (!response.ok) {
-        // The response body is deliberately never read into the error: OAuth error bodies
-        // can echo request parameters, and this message will reach logs.
+        // `invalid_grant` means the grant itself is dead — the user revoked access or the
+        // token expired — which retries and backoff cannot fix. Surfaced as a typed error
+        // so digest generation answers with `gmail_reconnect_required` instead of a 500.
+        if ((await readOAuthErrorCode(response)) === 'invalid_grant') {
+          throw new GmailReconnectRequiredError();
+        }
+        // Beyond that one validated code, the body is never read into the error: OAuth
+        // error bodies can echo request parameters, and this message will reach logs.
         throw new Error(`Google token endpoint returned status ${response.status}`);
       }
 
