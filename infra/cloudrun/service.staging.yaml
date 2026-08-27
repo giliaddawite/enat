@@ -63,6 +63,17 @@ spec:
             # looping the service.
             - name: GOOGLE_OAUTH_AUDIENCE
               value: OAUTH_AUDIENCE_PLACEHOLDER
+            # Optional pair (TICKET-105): the Pub/Sub push endpoint is mounted only when
+            # both render non-empty, and blank values degrade to an unmounted endpoint
+            # rather than a boot failure — so a deploy made before the push subscription
+            # exists still serves. The audience is substituted from a GitHub secret like
+            # the values above (quoted, so an unset secret renders a valid empty string);
+            # the invoker email is derived from the project id, since the scheduler
+            # service account's name is fixed by infra/README.md.
+            - name: PUBSUB_PUSH_AUDIENCE
+              value: 'PUBSUB_AUDIENCE_PLACEHOLDER'
+            - name: PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL
+              value: enat-scheduler@PROJECT_ID_PLACEHOLDER.iam.gserviceaccount.com
           resources:
             limits:
               cpu: '1'

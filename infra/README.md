@@ -107,13 +107,22 @@ gcloud scheduler jobs create pubsub enat-digest-daily \
   --message-body '{"uid":"<moms-google-user-id>"}'
 ```
 
-Set on the Cloud Run service once the above exists (see `.env.example` for the full list):
+Environment variables (see `.env.example` for the full list):
 
-- `PUBSUB_PUSH_AUDIENCE` — the `--push-auth-token-audience` value above.
-- `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL` — `enat-scheduler@PROJECT_ID.iam.gserviceaccount.com`.
+- `PUBSUB_PUSH_AUDIENCE` and `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL` are rendered into
+  `service.staging.yaml` by the deploy workflow: the audience from the
+  `PUBSUB_PUSH_AUDIENCE` GitHub secret (set it to the `--push-auth-token-audience` value
+  above), the email derived from the project id — which is why the service account name
+  `enat-scheduler` above is load-bearing. Do not set these by hand with
+  `gcloud run services update`; the next deploy renders the YAML and would revert them.
 - `CLAUDE_API_KEY`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` — needed for the
   job itself to reach Gmail and Claude; `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` are the pair
-  TICKET-202's consent flow issues the user's refresh token under.
+  TICKET-202's consent flow issues the user's refresh token under. These are credentials,
+  so they do not go through YAML values: store them in Secret Manager and mount them with
+  `gcloud run services update --set-secrets` — and note that until the mounts are added to
+  `service.staging.yaml` as `secretKeyRef` entries (a follow-up that must wait for the
+  secrets to exist, or every deploy would fail on the missing reference), each deploy
+  drops them and the `--set-secrets` command must be re-run.
 
 Until all five are set, the service still boots and serves reads of already-generated
 digests; `/internal/digest-generate` (missing `PUBSUB_PUSH_AUDIENCE`/
