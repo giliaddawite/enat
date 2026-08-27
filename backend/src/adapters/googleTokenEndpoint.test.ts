@@ -17,7 +17,9 @@ describe('readOAuthErrorCode', () => {
   });
 
   it('returns undefined when the error field is missing or not a string', async () => {
-    await expect(readOAuthErrorCode(errorResponse('{"error_description":"x"}'))).resolves.toBeUndefined();
+    await expect(
+      readOAuthErrorCode(errorResponse('{"error_description":"x"}')),
+    ).resolves.toBeUndefined();
     await expect(readOAuthErrorCode(errorResponse('{"error":42}'))).resolves.toBeUndefined();
     await expect(readOAuthErrorCode(errorResponse('"invalid_grant"'))).resolves.toBeUndefined();
   });

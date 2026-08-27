@@ -99,6 +99,7 @@ async function serve(deps: { digests: DigestStore; digestGeneration: DigestGener
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
       now: NOW,
       verses: { verseFor: () => FALLBACK_VERSE },
+      gmailConsent: { connect: () => Promise.reject(new Error('not exercised by these tests')) },
       ...deps,
     }),
   );

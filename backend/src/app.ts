@@ -3,6 +3,7 @@ import type { IdTokenVerifier } from './adapters/idTokenVerifier.js';
 import type { UsersRepository } from './adapters/usersRepository.js';
 import type { Config } from './config.js';
 import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
+import type { GmailConsentService } from './domain/gmailConsent.js';
 import type { RateLimiter } from './domain/rateLimiter.js';
 import type { DailyVerseSource } from './domain/verse.js';
 import type { Logger } from './logging/logger.js';
@@ -15,6 +16,7 @@ import { requestId } from './http/requestId.js';
 import { requestLogging } from './http/requestLogging.js';
 import { generateDigest, getDigest } from './routes/digest.js';
 import { createDigestGenerationPushHandler } from './routes/digestGenerationPush.js';
+import { connectGmail } from './routes/gmailConsent.js';
 import { healthz } from './routes/health.js';
 import { getVerseToday } from './routes/verse.js';
 
@@ -26,6 +28,12 @@ export interface AppDependencies {
   readonly rateLimiter: RateLimiter;
   readonly digests: DigestStore;
   readonly digestGeneration: DigestGenerationService;
+  /**
+   * The Gmail consent flow's server half (TICKET-202). Like `digestGeneration`, always
+   * mounted: a deployment missing the Gmail OAuth secrets gets a service whose `connect`
+   * rejects (see `index.ts`), so the route answers a clear 5xx rather than a misleading 404.
+   */
+  readonly gmailConsent: GmailConsentService;
   /**
    * The daily verse rotation (TICKET-106), bundled with the build and filtered to
    * maintainer-verified entries in production — see `buildVerseSource` in `index.ts`.
@@ -71,6 +79,7 @@ export function createApp(dependencies: AppDependencies): Express {
     rateLimiter,
     digests,
     digestGeneration,
+    gmailConsent,
     verses,
     digestGenerationPush,
   } = dependencies;
@@ -95,6 +104,13 @@ export function createApp(dependencies: AppDependencies): Express {
   const digestRouteDependencies = { digests, generation: digestGeneration, now, logger };
   v1.get('/digest', getDigest(digestRouteDependencies));
   v1.post('/digest/generate', generateDigest(digestRouteDependencies));
+  // Body parsing only on the one route that takes a body. The limit is deliberately tiny:
+  // the body is a single OAuth auth code, so anything larger is not a consent request.
+  v1.post(
+    '/auth/gmail-consent',
+    express.json({ limit: '8kb' }),
+    connectGmail({ consent: gmailConsent }),
+  );
   v1.get('/verse/today', getVerseToday({ verses, now }));
   app.use('/v1', v1);
 
