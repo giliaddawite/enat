@@ -60,6 +60,8 @@ class NetworkGmailConsentRepository
                 ApiErrorCode.INVALID_GRANT -> ConsentSubmissionResult.InvalidGrant
                 ApiErrorCode.NO_REFRESH_TOKEN -> ConsentSubmissionResult.NoRefreshToken
                 ApiErrorCode.INSUFFICIENT_SCOPE -> ConsentSubmissionResult.InsufficientScope
+                // Deliberately generic: retrying the flow lets the right account be picked.
+                ApiErrorCode.ACCOUNT_MISMATCH -> ConsentSubmissionResult.Failed
                 else -> ConsentSubmissionResult.Failed
             }
         }

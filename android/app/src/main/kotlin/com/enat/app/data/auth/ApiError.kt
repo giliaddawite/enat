@@ -18,6 +18,13 @@ object ApiErrorCode {
     const val INSUFFICIENT_SCOPE = "insufficient_scope"
 
     /**
+     * The exchange's id_token is missing or belongs to a different account than the
+     * signed-in one. Generic retry is the agreed handling — re-running the flow lets
+     * the installer pick the matching account.
+     */
+    const val ACCOUNT_MISMATCH = "account_mismatch"
+
+    /**
      * The stored Gmail grant was revoked (409 from POST /v1/digest/generate) — show
      * [com.enat.app.ui.components.ReconnectCard] and re-run the consent flow. Distinct
      * from the backend's "gmail_not_connected", which means consent never happened.

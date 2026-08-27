@@ -68,6 +68,14 @@ class NetworkGmailConsentRepositoryTest {
         }
 
     @Test
+    fun `account_mismatch maps to the generic retry path`() =
+        runTest {
+            authApi.response = errorResponse(400, ApiErrorCode.ACCOUNT_MISMATCH)
+
+            assertEquals(ConsentSubmissionResult.Failed, repository.submitAuthCode("t", "c"))
+        }
+
+    @Test
     fun `unrecognized codes map to the generic failure`() =
         runTest {
             authApi.response = errorResponse(502, "bad_gateway")
