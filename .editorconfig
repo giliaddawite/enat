@@ -21,6 +21,8 @@ indent_size = 4
 max_line_length = 120
 ij_kotlin_allow_trailing_comma = true
 ij_kotlin_allow_trailing_comma_on_call_site = true
+# Composables are PascalCase by convention; ktlint's function-naming rule must not fight that.
+ktlint_function_naming_ignore_when_annotated_with = Composable
 
 [*.{gradle,pro}]
 indent_size = 4
