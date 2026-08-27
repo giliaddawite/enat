@@ -8,7 +8,7 @@ name: Deploy
 #
 # Required GitHub secrets (repo or environment scoped — see docs/ci-cd.md):
 #   GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_DEPLOY_SERVICE_ACCOUNT, GCP_PROJECT_ID,
-#   GCP_REGION, ARTIFACT_REGISTRY_REPO, GOOGLE_OAUTH_AUDIENCE
+#   GCP_REGION, ARTIFACT_REGISTRY_REPO, GOOGLE_OAUTH_AUDIENCE, PUBSUB_PUSH_AUDIENCE
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
 #   ANDROID_KEY_PASSWORD
 # None of these have values in this repository — they're set in
@@ -109,9 +109,17 @@ jobs:
             echo "GOOGLE_OAUTH_AUDIENCE secret is not set; required at boot (TICKET-102)" >&2
             exit 1
           fi
+          # Unlike the audience above, this one is optional by design: config.ts treats a
+          # blank value as unset and simply doesn't mount /internal/digest-generate, so an
+          # unset secret degrades scheduled digests instead of blocking the deploy. Warn
+          # loudly rather than fail, so the gap is visible in the run summary.
+          if [ -z "${{ secrets.PUBSUB_PUSH_AUDIENCE }}" ]; then
+            echo "::warning::PUBSUB_PUSH_AUDIENCE secret is not set; the Pub/Sub push endpoint will not be mounted (TICKET-105)"
+          fi
           sed -e "s|IMAGE_PLACEHOLDER|${{ steps.digest.outputs.ref }}|" \
               -e "s|PROJECT_ID_PLACEHOLDER|${{ secrets.GCP_PROJECT_ID }}|g" \
               -e "s|OAUTH_AUDIENCE_PLACEHOLDER|${{ secrets.GOOGLE_OAUTH_AUDIENCE }}|" \
+              -e "s|PUBSUB_AUDIENCE_PLACEHOLDER|${{ secrets.PUBSUB_PUSH_AUDIENCE }}|" \
               infra/cloudrun/service.staging.yaml > "$RUNNER_TEMP/service.staging.rendered.yaml"
           if grep -q "_PLACEHOLDER" "$RUNNER_TEMP/service.staging.rendered.yaml"; then
             echo "unsubstituted placeholder remains in rendered service definition" >&2

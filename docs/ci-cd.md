@@ -48,6 +48,7 @@ project, service accounts, and IAM roles these secrets point at.
 | `GCP_REGION` | deploy-backend | `us-central1` — must match the region conventions in `infra/` |
 | `ARTIFACT_REGISTRY_REPO` | deploy-backend | Artifact Registry repository name |
 | `GOOGLE_OAUTH_AUDIENCE` | deploy-backend | comma-separated OAuth client ID(s) an ID token's `aud` claim must match (TICKET-102); the service refuses to boot in production without it, so the deploy job fails fast if this secret is unset |
+| `PUBSUB_PUSH_AUDIENCE` | deploy-backend | the `aud` claim on Pub/Sub push OIDC tokens — the push subscription's `--push-auth-token-audience`, normally `https://<service-url>/internal/digest-generate` (TICKET-105). Optional: if unset the deploy warns and the push endpoint is simply not mounted |
 | `ANDROID_KEYSTORE_BASE64` | build-android-release | release keystore, base64-encoded |
 | `ANDROID_KEYSTORE_PASSWORD` | build-android-release | |
 | `ANDROID_KEY_ALIAS` | build-android-release | |
