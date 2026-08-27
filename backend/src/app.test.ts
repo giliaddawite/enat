@@ -37,6 +37,7 @@ const stubUsersRepository: UsersRepository = {
       refreshTokenRef: null,
     }),
   getById: () => Promise.resolve(null),
+  setRefreshTokenRef: () => Promise.resolve(),
 };
 
 const stubDigests: DigestStore = {

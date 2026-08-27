@@ -64,6 +64,7 @@ function fixedUsersRepository(user: User = MOM_RECORD): UsersRepository {
   return {
     findOrCreateByGoogleId: () => Promise.resolve(user),
     getById: () => Promise.resolve(user),
+    setRefreshTokenRef: () => Promise.resolve(),
   };
 }
 
@@ -71,6 +72,7 @@ function failingUsersRepository(error: Error): UsersRepository {
   return {
     findOrCreateByGoogleId: () => Promise.reject(error),
     getById: () => Promise.reject(error),
+    setRefreshTokenRef: () => Promise.reject(error),
   };
 }
 
@@ -242,6 +244,7 @@ describe('authenticate', () => {
         return Promise.resolve(MOM_RECORD);
       },
       getById: () => Promise.resolve(MOM_RECORD),
+      setRefreshTokenRef: () => Promise.resolve(),
     };
     const { server: running } = await serve(
       scriptedVerifier({ [VALID_TOKEN]: { ...MOM, emailVerified: false } }),

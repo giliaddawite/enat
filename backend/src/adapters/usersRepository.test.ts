@@ -180,6 +180,37 @@ describe('createFirestoreUsersRepository', () => {
     expect(documents['users/google-user-123']).toEqual(existing);
   });
 
+  it('setRefreshTokenRef points the record at the stored token without touching other fields', async () => {
+    const existing = {
+      uid: 'google-user-123',
+      email: 'mom@example.com',
+      createdAt: '2020-01-01T00:00:00.000Z',
+      locale: 'am',
+      refreshTokenRef: 'projects/enat/secrets/gmail-refresh-token-google-user-123/versions/1',
+    };
+    const { firestore, documents } = fakeFirestore({ 'users/google-user-123': existing });
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    await repository.setRefreshTokenRef(
+      'google-user-123',
+      'projects/enat/secrets/gmail-refresh-token-google-user-123/versions/2',
+    );
+
+    expect(documents['users/google-user-123']).toEqual({
+      ...existing,
+      refreshTokenRef: 'projects/enat/secrets/gmail-refresh-token-google-user-123/versions/2',
+    });
+  });
+
+  it('setRefreshTokenRef rejects for a uid with no user record', async () => {
+    const { firestore } = fakeFirestore();
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    await expect(
+      repository.setRefreshTokenRef('no-such-uid', 'projects/enat/secrets/x/versions/1'),
+    ).rejects.toThrow();
+  });
+
   it('never includes stored field values in a schema-validation error message', async () => {
     const { firestore } = fakeFirestore({
       'users/google-user-123': { uid: 'google-user-123', email: 'super-secret@example.com' },
