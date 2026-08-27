@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English fallback. Amharic (values-am/) is the primary language — every key
+     here must exist there too. -->
+<resources>
+    <string name="app_name">Enat</string>
+    <string name="home_greeting_morning">Good morning</string>
+    <string name="home_greeting_afternoon">Good afternoon</string>
+    <string name="home_greeting_evening">Good evening</string>
+    <string name="home_loading">Loading…</string>
+    <string name="home_error">Something went wrong. Please try again.</string>
+    <string name="home_refresh_button">Refresh</string>
+    <string name="home_retry_button">Try again</string>
+</resources>

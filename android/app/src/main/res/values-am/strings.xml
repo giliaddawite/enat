@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Amharic — the primary language the end user reads. Every string here needs
+     human review before release (CLAUDE.md § working agreements). -->
+<resources>
+    <string name="app_name">እናት</string>
+    <string name="home_greeting_morning">እንደምን አደሩ</string>
+    <string name="home_greeting_afternoon">እንደምን ዋሉ</string>
+    <string name="home_greeting_evening">እንደምን አመሹ</string>
+    <string name="home_loading">በመጫን ላይ ነው…</string>
+    <string name="home_error">ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="home_refresh_button">አድስ</string>
+    <string name="home_retry_button">እንደገና ይሞክሩ</string>
+</resources>
