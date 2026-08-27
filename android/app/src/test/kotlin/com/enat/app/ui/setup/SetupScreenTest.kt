@@ -3,6 +3,10 @@ package com.enat.app.ui.setup
 import android.app.Application
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -100,6 +104,34 @@ class SetupScreenTest {
         composeTestRule
             .onNodeWithText(context.getString(R.string.setup_status_authorizing))
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun authorizing_marksTheGmailStepAsCurrentForTalkBack() {
+        setScreen(SetupUiState.Authorizing)
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.setup_step_gmail))
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    context.getString(R.string.setup_step_current),
+                ),
+            )
+    }
+
+    @Test
+    fun statusText_isAPoliteLiveRegionSoTalkBackAnnouncesTransitions() {
+        setScreen(SetupUiState.Connecting)
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.setup_status_connecting))
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
     }
 
     @Test

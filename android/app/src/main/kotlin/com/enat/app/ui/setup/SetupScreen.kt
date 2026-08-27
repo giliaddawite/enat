@@ -25,7 +25,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -140,6 +144,7 @@ private fun StepList(currentStep: Int) {
                 .fillMaxWidth()
                 .padding(top = 24.dp),
     ) {
+        val currentStepDescription = stringResource(R.string.setup_step_current)
         steps.forEachIndexed { index, labelRes ->
             val isCurrent = index + 1 == currentStep
             Text(
@@ -152,7 +157,14 @@ private fun StepList(currentStep: Int) {
                     } else {
                         MaterialTheme.colorScheme.onBackground
                     },
-                modifier = Modifier.padding(top = 8.dp),
+                modifier =
+                    Modifier
+                        .padding(top = 8.dp)
+                        // Bold + color alone would leave TalkBack users guessing which
+                        // step is active; the state description says it out loud.
+                        .semantics {
+                            if (isCurrent) stateDescription = currentStepDescription
+                        },
             )
         }
     }
@@ -182,7 +194,12 @@ private fun ProgressContent(
         text = stringResource(messageRes),
         style = MaterialTheme.typography.titleLarge,
         textAlign = TextAlign.Center,
-        modifier = Modifier.padding(top = 24.dp),
+        modifier =
+            Modifier
+                .padding(top = 24.dp)
+                // Announce each transition (signing in → authorizing → connecting)
+                // without stealing focus.
+                .semantics { liveRegion = LiveRegionMode.Polite },
     )
     CircularProgressIndicator(
         modifier =
@@ -204,7 +221,8 @@ private fun SuccessContent(onDone: () -> Unit) {
         modifier =
             Modifier
                 .padding(top = 24.dp)
-                .testTag("setup_success"),
+                .testTag("setup_success")
+                .semantics { liveRegion = LiveRegionMode.Polite },
     )
     Text(
         text = stringResource(R.string.setup_success_body),
@@ -252,7 +270,8 @@ private fun RetryableError(
         modifier =
             Modifier
                 .padding(top = 24.dp)
-                .testTag("setup_error"),
+                .testTag("setup_error")
+                .semantics { liveRegion = LiveRegionMode.Polite },
     )
     PrimaryActionButton(
         label = stringResource(R.string.setup_retry_button),
@@ -271,6 +290,7 @@ private fun ConfigMissingContent() {
         modifier =
             Modifier
                 .padding(top = 24.dp)
-                .testTag("setup_config_error"),
+                .testTag("setup_config_error")
+                .semantics { liveRegion = LiveRegionMode.Polite },
     )
 }
