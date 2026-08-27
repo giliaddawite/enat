@@ -10,4 +10,29 @@
     <string name="home_error">Something went wrong. Please try again.</string>
     <string name="home_refresh_button">Refresh</string>
     <string name="home_retry_button">Try again</string>
+
+    <!-- One-time setup flow (TICKET-202). Run by the installer, still Amharic-first. -->
+    <string name="setup_title">Set up Enat</string>
+    <string name="setup_step_sign_in">1. Sign in with Google</string>
+    <string name="setup_step_gmail">2. Allow Gmail access</string>
+    <string name="setup_step_connect">3. Connect to the server</string>
+    <string name="setup_intro">Three steps connect this phone to Gmail. Tap the button to begin.</string>
+    <string name="setup_sign_in_button">Sign in with Google</string>
+    <string name="setup_status_signing_in">Signing in…</string>
+    <string name="setup_status_authorizing">Waiting for Gmail permission…</string>
+    <string name="setup_status_connecting">Connecting to the server…</string>
+    <string name="setup_success_title">All set!</string>
+    <string name="setup_success_body">Gmail is connected. The app is ready to use.</string>
+    <string name="setup_done_button">Start</string>
+    <string name="setup_retry_button">Try again</string>
+    <string name="setup_error_sign_in">Sign-in did not finish. Please try again.</string>
+    <string name="setup_error_authorization">Gmail permission did not finish. Please try again.</string>
+    <string name="setup_error_scopes">Both Gmail permissions are needed. On the next screen, keep every box checked.</string>
+    <string name="setup_error_connection">Could not reach the server. Check the internet connection and try again.</string>
+    <string name="setup_error_config">The Google client ID is not set. Add enatGoogleWebClientId to android/local.properties and rebuild the app.</string>
+
+    <!-- Reusable re-connect card, shown when the backend reports gmail_reconnect_required. -->
+    <string name="reconnect_title">Gmail needs to be reconnected</string>
+    <string name="reconnect_body">The connection to Gmail was interrupted. Tap the button to grant access again.</string>
+    <string name="reconnect_button">Reconnect</string>
 </resources>

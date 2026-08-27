@@ -10,4 +10,29 @@
     <string name="home_error">ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።</string>
     <string name="home_refresh_button">አድስ</string>
     <string name="home_retry_button">እንደገና ይሞክሩ</string>
+
+    <!-- One-time setup flow (TICKET-202). -->
+    <string name="setup_title">እናትን ያዋቅሩ</string>
+    <string name="setup_step_sign_in">1. በGoogle ይግቡ</string>
+    <string name="setup_step_gmail">2. የGmail ፈቃድ ይስጡ</string>
+    <string name="setup_step_connect">3. ከአገልጋዩ ጋር ይገናኙ</string>
+    <string name="setup_intro">ይህን ስልክ ከGmail ጋር ለማገናኘት ሦስት ደረጃዎች አሉ። ለመጀመር ቁልፉን ይጫኑ።</string>
+    <string name="setup_sign_in_button">በGoogle ይግቡ</string>
+    <string name="setup_status_signing_in">በመግባት ላይ ነው…</string>
+    <string name="setup_status_authorizing">የGmail ፈቃድ በመጠበቅ ላይ ነው…</string>
+    <string name="setup_status_connecting">ከአገልጋዩ ጋር በመገናኘት ላይ ነው…</string>
+    <string name="setup_success_title">ተጠናቋል!</string>
+    <string name="setup_success_body">Gmail ተገናኝቷል። መተግበሪያው ለአገልግሎት ዝግጁ ነው።</string>
+    <string name="setup_done_button">ጀምር</string>
+    <string name="setup_retry_button">እንደገና ይሞክሩ</string>
+    <string name="setup_error_sign_in">መግባት አልተጠናቀቀም። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="setup_error_authorization">የGmail ፈቃድ አልተጠናቀቀም። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="setup_error_scopes">ሁለቱም የGmail ፈቃዶች ያስፈልጋሉ። በሚቀጥለው ማያ ገጽ ሁሉንም ሳጥኖች ምልክት እንዳደረጉ ይተዉ።</string>
+    <string name="setup_error_connection">አገልጋዩን ማግኘት አልተቻለም። የበይነመረብ ግንኙነትን ያረጋግጡ እና እንደገና ይሞክሩ።</string>
+    <string name="setup_error_config">የGoogle መለያ ቁልፍ (enatGoogleWebClientId) አልተዘጋጀም። በ android/local.properties ውስጥ ያክሉት እና መተግበሪያውን እንደገና ይገንቡ።</string>
+
+    <!-- ዳግም መገናኛ ካርድ (gmail_reconnect_required) -->
+    <string name="reconnect_title">Gmail እንደገና መገናኘት አለበት</string>
+    <string name="reconnect_body">ከGmail ጋር የነበረው ግንኙነት ተቋርጧል። እንደገና ፈቃድ ለመስጠት ቁልፉን ይጫኑ።</string>
+    <string name="reconnect_button">እንደገና ያገናኙ</string>
 </resources>
