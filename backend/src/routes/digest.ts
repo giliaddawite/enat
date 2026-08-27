@@ -6,8 +6,8 @@ import {
   type DigestGenerationService,
   type DigestStore,
 } from '../domain/digestGeneration.js';
-import type { User } from '../domain/user.js';
 import { HttpError } from '../http/httpError.js';
+import { requireUser } from '../http/requireUser.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -95,14 +95,4 @@ function respondWithDigest(req: Request, res: Response, digest: Digest): void {
     return;
   }
   res.status(200).json(digest);
-}
-
-function requireUser(req: Request): User {
-  // Unreachable in practice: this route is only mounted behind `authenticate` on the `v1`
-  // router (see app.ts). Guarded rather than asserted so a future mounting mistake fails
-  // loudly as a 401, not a crash.
-  if (req.user === undefined) {
-    throw new HttpError(401);
-  }
-  return req.user;
 }
