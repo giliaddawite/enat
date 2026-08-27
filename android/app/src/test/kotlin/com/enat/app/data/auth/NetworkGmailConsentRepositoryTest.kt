@@ -49,6 +49,25 @@ class NetworkGmailConsentRepositoryTest {
         }
 
     @Test
+    fun `401 maps to SessionExpired even without an envelope body`() =
+        runTest {
+            // 401s deliberately leak no detail — the status alone must be enough.
+            authApi.response = Response.error(401, "".toResponseBody("application/json".toMediaType()))
+
+            assertEquals(ConsentSubmissionResult.SessionExpired, repository.submitAuthCode("t", "c"))
+        }
+
+    @Test
+    fun `an oversized error body is read capped and treated as generic, not a crash`() =
+        runTest {
+            val oversized = "x".repeat(64 * 1024)
+            authApi.response =
+                Response.error(500, oversized.toResponseBody("application/json".toMediaType()))
+
+            assertEquals(ConsentSubmissionResult.Failed, repository.submitAuthCode("t", "c"))
+        }
+
+    @Test
     fun `unrecognized codes map to the generic failure`() =
         runTest {
             authApi.response = errorResponse(502, "bad_gateway")

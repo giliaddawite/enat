@@ -201,6 +201,27 @@ class SetupViewModelTest {
         }
 
     @Test
+    fun `expired session routes retry back through a fresh sign-in, not the dead token`() =
+        runTest {
+            consentRepository.result = ConsentSubmissionResult.SessionExpired
+            val viewModel = viewModel()
+
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+            assertEquals(SetupUiState.Error(SetupErrorKind.SIGN_IN_FAILED), viewModel.uiState.value)
+
+            signInGateway.outcome = SignInOutcome.SignedIn(FRESH_ID_TOKEN)
+            consentRepository.result = ConsentSubmissionResult.Accepted
+            viewModel.retry(activity)
+            advanceUntilIdle()
+
+            assertEquals(SetupUiState.Success, viewModel.uiState.value)
+            // A second sign-in happened, and the resubmission used the fresh token.
+            assertEquals(2, signInGateway.invocations)
+            assertEquals(FRESH_ID_TOKEN to AUTH_CODE, consentRepository.submissions.last())
+        }
+
+    @Test
     fun `insufficient_scope from the backend shows the scopes error`() =
         runTest {
             consentRepository.result = ConsentSubmissionResult.InsufficientScope
@@ -298,6 +319,7 @@ class SetupViewModelTest {
 
     private companion object {
         const val ID_TOKEN = "id-token"
+        const val FRESH_ID_TOKEN = "fresh-id-token"
         const val AUTH_CODE = "auth-code"
         const val RESULT_OK = Activity.RESULT_OK
         const val RESULT_CANCELED = Activity.RESULT_CANCELED

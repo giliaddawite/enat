@@ -115,6 +115,13 @@ class SetupViewModel
                         SetupUiState.Error(SetupErrorKind.NO_REFRESH_TOKEN)
                     ConsentSubmissionResult.InsufficientScope ->
                         SetupUiState.Error(SetupErrorKind.SCOPES_MISSING)
+                    ConsentSubmissionResult.SessionExpired -> {
+                        // The ID token (~1h) died mid-setup. Clearing it makes retry()
+                        // route back through startSignIn for a fresh token instead of
+                        // re-running authorization with the dead one forever.
+                        idToken = null
+                        SetupUiState.Error(SetupErrorKind.SIGN_IN_FAILED)
+                    }
                     ConsentSubmissionResult.Failed ->
                         SetupUiState.Error(SetupErrorKind.CONNECTION_FAILED)
                 }
