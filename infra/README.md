@@ -118,11 +118,22 @@ Environment variables (see `.env.example` for the full list):
 - `CLAUDE_API_KEY`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` — needed for the
   job itself to reach Gmail and Claude; `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET` are the pair
   TICKET-202's consent flow issues the user's refresh token under. These are credentials,
-  so they do not go through YAML values: store them in Secret Manager and mount them with
-  `gcloud run services update --set-secrets` — and note that until the mounts are added to
-  `service.staging.yaml` as `secretKeyRef` entries (a follow-up that must wait for the
-  secrets to exist, or every deploy would fail on the missing reference), each deploy
-  drops them and the `--set-secrets` command must be re-run.
+  so they never appear as YAML values: `service.staging.yaml` mounts them from Secret
+  Manager by reference (`secretKeyRef`, pinned to `latest`). The three secrets —
+  `claude-api-key`, `google-oauth-client-id`, `google-oauth-client-secret` — must exist in
+  the project and grant `roles/secretmanager.secretAccessor` to the runtime service
+  account, or the rendered revision fails to start:
+
+  ```sh
+  gcloud secrets create claude-api-key --project PROJECT_ID --data-file=-  # then the key on stdin
+  gcloud secrets add-iam-policy-binding claude-api-key --project PROJECT_ID \
+    --member "serviceAccount:enat-api-staging@PROJECT_ID.iam.gserviceaccount.com" \
+    --role roles/secretmanager.secretAccessor
+  # repeat for google-oauth-client-id and google-oauth-client-secret
+  ```
+
+  Rotation is `gcloud secrets versions add` with the new value — the `latest` pin means
+  the next deployed revision picks it up with no manifest change.
 
 Until all five are set, the service still boots and serves reads of already-generated
 digests; `/internal/digest-generate` (missing `PUBSUB_PUSH_AUDIENCE`/

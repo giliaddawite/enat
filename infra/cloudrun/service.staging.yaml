@@ -74,6 +74,28 @@ spec:
               value: 'PUBSUB_AUDIENCE_PLACEHOLDER'
             - name: PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL
               value: enat-scheduler@PROJECT_ID_PLACEHOLDER.iam.gserviceaccount.com
+            # Credentials mounted from Secret Manager, never as YAML values: the runtime
+            # service account holds secretAccessor on exactly these three secrets (see
+            # infra/README.md for their creation). `latest` rather than a pinned version
+            # so rotation is a `gcloud secrets versions add` plus a redeploy, with no
+            # manifest change. These references make the mounts survive every deploy —
+            # but they also mean the secrets must exist before this file is applied, or
+            # the revision fails to start.
+            - name: CLAUDE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: claude-api-key
+                  key: latest
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-client-id
+                  key: latest
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth-client-secret
+                  key: latest
           resources:
             limits:
               cpu: '1'
