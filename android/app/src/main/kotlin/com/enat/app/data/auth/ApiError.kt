@@ -1,0 +1,36 @@
+package com.enat.app.data.auth
+
+import kotlinx.serialization.Serializable
+
+/**
+ * Stable machine-readable codes from the backend's standard error envelope,
+ * `{"error":{"code","message","requestId"}}`. Single source of truth for the exact
+ * strings — screens branch on these constants, never on prose.
+ */
+object ApiErrorCode {
+    /** Google rejected the auth code (expired or already used) — a fresh authorization fixes it. */
+    const val INVALID_GRANT = "invalid_grant"
+
+    /** The exchange returned no refresh token — re-run authorization with forced consent. */
+    const val NO_REFRESH_TOKEN = "no_refresh_token"
+
+    /** The user unchecked one or both Gmail scopes on the consent screen. */
+    const val INSUFFICIENT_SCOPE = "insufficient_scope"
+
+    /**
+     * The stored Gmail grant was revoked (409 from POST /v1/digest/generate) — show
+     * [com.enat.app.ui.components.ReconnectCard] and re-run the consent flow. Distinct
+     * from the backend's "gmail_not_connected", which means consent never happened.
+     */
+    const val GMAIL_RECONNECT_REQUIRED = "gmail_reconnect_required"
+}
+
+@Serializable
+data class ApiErrorEnvelope(
+    val error: ApiErrorBody,
+)
+
+@Serializable
+data class ApiErrorBody(
+    val code: String,
+)
