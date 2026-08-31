@@ -50,6 +50,18 @@ export interface IdTokenVerifier {
 }
 
 /**
+ * The narrow claims profile the Gmail consent flow needs (TICKET-202): the code-exchange
+ * id_token proves which Google account granted the code, and account-binding reads only
+ * `sub`. The Android authorization requests `openid` plus the Gmail scopes — no `email`
+ * scope — so Google may legitimately omit the email claim there; requiring it (as the
+ * sign-in profile does) rejects perfectly valid grants. Signature, issuer, audience and
+ * expiry checks are identical to sign-in's — only the payload schema is narrower.
+ */
+export interface IdTokenSubjectVerifier {
+  verifySubject(idToken: string): Promise<{ readonly googleUserId: string }>;
+}
+
+/**
  * Google's ID token payload carries more than this, but the service only ever reads these
  * three fields — validating narrowly means an unrelated upstream change can't silently
  * widen what an attacker-controlled payload is trusted to contain.
@@ -60,6 +72,11 @@ const GoogleIdTokenClaims = z.object({
   email_verified: z.boolean().optional().default(false),
 });
 
+/** Account-binding needs the subject and nothing else — see `IdTokenSubjectVerifier`. */
+const GoogleIdTokenSubjectClaims = z.object({
+  sub: z.string().min(1),
+});
+
 const GOOGLE_JWKS_URL = new URL('https://www.googleapis.com/oauth2/v3/certs');
 
 /** Google issues ID tokens under either form; both are accepted per Google's own docs. */
@@ -68,8 +85,19 @@ const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 export interface GoogleIdTokenVerifierOptions {
   /** Accepted values of the token's `aud` claim — normally the Android app's OAuth client ID. */
   readonly audience: readonly string[];
-  /** Overrides the key source. Tests point this at a local, in-memory key set. */
+  /** Overrides the key source. Tests point this at a local, in-memory key set; production
+   * passes one `createGoogleJwks()` result to every Google verifier so the JWKS cache is
+   * shared instead of fetched once per verifier instance. */
   readonly jwks?: JWTVerifyGetKey;
+}
+
+/**
+ * One in-process, self-refreshing cache of Google's signing keys (`createRemoteJWKSet`
+ * re-fetches only on a key-id miss). Exported so the composition root can hand the same
+ * cache to every verifier it builds, whatever their audiences.
+ */
+export function createGoogleJwks(): JWTVerifyGetKey {
+  return createRemoteJWKSet(GOOGLE_JWKS_URL);
 }
 
 /**
@@ -99,6 +127,30 @@ export function createGoogleIdTokenVerifier(
         email: claims.data.email,
         emailVerified: claims.data.email_verified,
       };
+    },
+  };
+}
+
+/**
+ * Same signature/issuer/audience/expiry pipeline as `createGoogleIdTokenVerifier`, same
+ * error taxonomy — only the claims schema differs. The sign-in profile above keeps its
+ * hard email requirement; do not loosen it there to serve this use case.
+ */
+export function createGoogleIdTokenSubjectVerifier(
+  options: GoogleIdTokenVerifierOptions,
+): IdTokenSubjectVerifier {
+  const jwks = options.jwks ?? createRemoteJWKSet(GOOGLE_JWKS_URL);
+
+  return {
+    async verifySubject(idToken) {
+      const payload = await verifyClaims(idToken, jwks, options.audience);
+      const claims = GoogleIdTokenSubjectClaims.safeParse(payload);
+      if (!claims.success) {
+        throw new IdTokenRejectedError('invalid_claims', 'ID token payload failed validation', {
+          cause: claims.error,
+        });
+      }
+      return { googleUserId: claims.data.sub };
     },
   };
 }

@@ -61,9 +61,11 @@ describe('createGmailConsentService', () => {
     expect(put).toHaveBeenCalledOnce();
   });
 
-  it("rejects with account_mismatch when the id_token asserts a different account's subject", async () => {
+  it("rejects with account_mismatch when the id_token asserts a different account's subject, logging subject_mismatch internally", async () => {
+    const logs = captureLogs();
     const { service, put, setRefreshTokenRef } = buildService({
       verifyConsentIdToken: () => Promise.resolve('some-other-google-user'),
+      logger: logs.logger,
     });
 
     const error = await service.connect('uid-1', 'auth-code').catch((caught: unknown) => caught);
@@ -72,13 +74,20 @@ describe('createGmailConsentService', () => {
     expect((error as GmailConsentRejectedError).reason).toBe('account_mismatch');
     expect(put).not.toHaveBeenCalled();
     expect(setRefreshTokenRef).not.toHaveBeenCalled();
+    expect(logs.entries).toContainEqual(
+      expect.objectContaining({ uid: 'uid-1', case: 'subject_mismatch' }),
+    );
+    // The internal case label never names the other account.
+    expect(JSON.stringify(logs.entries)).not.toContain('some-other-google-user');
   });
 
-  it('rejects with account_mismatch when the exchange carried no id_token at all', async () => {
+  it('rejects with account_mismatch when the exchange carried no id_token at all, logging id_token_absent internally', async () => {
+    const logs = captureLogs();
     const verify = vi.fn(() => Promise.resolve('uid-1'));
     const { service, put } = buildService({
       grant: { ...GRANT, idToken: null },
       verifyConsentIdToken: verify,
+      logger: logs.logger,
     });
 
     const error = await service.connect('uid-1', 'auth-code').catch((caught: unknown) => caught);
@@ -86,17 +95,25 @@ describe('createGmailConsentService', () => {
     expect((error as GmailConsentRejectedError).reason).toBe('account_mismatch');
     expect(verify).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
+    expect(logs.entries).toContainEqual(
+      expect.objectContaining({ uid: 'uid-1', case: 'id_token_absent' }),
+    );
   });
 
-  it('rejects with account_mismatch when the id_token does not verify', async () => {
+  it('rejects with account_mismatch when the id_token does not verify, logging id_token_unverifiable internally', async () => {
+    const logs = captureLogs();
     const { service, put } = buildService({
       verifyConsentIdToken: () => Promise.resolve(null),
+      logger: logs.logger,
     });
 
     const error = await service.connect('uid-1', 'auth-code').catch((caught: unknown) => caught);
 
     expect((error as GmailConsentRejectedError).reason).toBe('account_mismatch');
     expect(put).not.toHaveBeenCalled();
+    expect(logs.entries).toContainEqual(
+      expect.objectContaining({ uid: 'uid-1', case: 'id_token_unverifiable' }),
+    );
   });
 
   it('checks the account binding before scopes — an unbound grant is rejected as such', async () => {
