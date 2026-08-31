@@ -1,5 +1,10 @@
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { IdTokenRejectedError, type IdTokenVerifier } from '../adapters/idTokenVerifier.js';
+import {
+  createGoogleIdTokenSubjectVerifier,
+  IdTokenRejectedError,
+  type IdTokenVerifier,
+} from '../adapters/idTokenVerifier.js';
 import { createGoogleAuthCodeExchanger } from '../adapters/googleAuthCodeExchange.js';
 import type { UsersRepository } from '../adapters/usersRepository.js';
 import { createApp } from '../app.js';
@@ -156,6 +161,62 @@ describe('POST /v1/auth/gmail-consent', () => {
       'uid-1',
       'secrets/gmail-refresh-token-uid-1/versions/1',
     );
+  });
+
+  it('accepts an id_token that omits the email claim — real JWT through the real subject verifier', async () => {
+    // Regression for the on-device failure: the Android authorization requests only
+    // `openid` + the Gmail scopes (no `email` scope), so the exchange id_token may carry
+    // a subject and no email. Verification must bind on `sub` alone. This test runs a
+    // really signed JWT through `createGoogleIdTokenSubjectVerifier`, wired the way
+    // index.ts wires it, instead of the string-compare fake the other tests use.
+    const { privateKey, publicKey } = await generateKeyPair('RS256');
+    const jwk: JWK = { ...(await exportJWK(publicKey)), alg: 'RS256', use: 'sig', kid: 'k1' };
+    const subjectVerifier = createGoogleIdTokenSubjectVerifier({
+      audience: ['client-id'],
+      jwks: createLocalJWKSet({ keys: [jwk] }),
+    });
+    const idToken = await new SignJWT({ sub: 'uid-1' }) // deliberately no email claim
+      .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer('https://accounts.google.com')
+      .setAudience('client-id')
+      .sign(privateKey);
+
+    const logs = captureLogs();
+    const put = vi.fn(() => Promise.resolve('secrets/gmail-refresh-token-uid-1/versions/1'));
+    const setRefreshTokenRef = vi.fn(() => Promise.resolve());
+    const consent = createGmailConsentService({
+      exchangeAuthCode: createGoogleAuthCodeExchanger({
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+        fetch: successExchange({
+          refresh_token: 'refresh-token-secret',
+          scope: REQUIRED_SCOPES,
+          id_token: idToken,
+        }),
+      }),
+      // Mirrors index.ts: rejected tokens become null (account_mismatch), outages throw.
+      verifyConsentIdToken: async (token) => {
+        try {
+          return (await subjectVerifier.verifySubject(token)).googleUserId;
+        } catch (error) {
+          if (error instanceof IdTokenRejectedError) {
+            return null;
+          }
+          throw error;
+        }
+      },
+      refreshTokens: { put },
+      users: { setRefreshTokenRef },
+      logger: logs.logger,
+    });
+    const harness = await serveWithService(consent, { put, setRefreshTokenRef, logs });
+
+    const response = await post(harness.server, JSON.stringify({ authCode: 'one-time-code' }));
+
+    expect(response.status).toBe(204);
+    expect(put).toHaveBeenCalledWith('uid-1', 'refresh-token-secret');
   });
 
   it('rejects an unauthenticated request with 401 before touching Google', async () => {

@@ -10,7 +10,9 @@ import { createGmailApiClient } from './adapters/gmailApiClient.js';
 import { createGoogleAuthCodeExchanger } from './adapters/googleAuthCodeExchange.js';
 import { createFirestoreGmailSyncStateStore } from './adapters/gmailSyncStateRepository.js';
 import {
+  createGoogleIdTokenSubjectVerifier,
   createGoogleIdTokenVerifier,
+  createGoogleJwks,
   IdTokenRejectedError,
   type IdTokenVerifier,
 } from './adapters/idTokenVerifier.js';
@@ -67,7 +69,10 @@ function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
   const firestore = createFirestoreClient(config.gcpProjectId);
   const usersRepository = createFirestoreUsersRepository(firestore);
   const digests = createFirestoreDigestStore(firestore, { logger });
-  const gmailOAuth = buildGmailOAuthAdapters(config, logger);
+  // One shared Google JWKS cache for every verifier this process builds — sign-in and the
+  // consent id_token check hit the same key set, so there is no reason to fetch it twice.
+  const googleJwks = createGoogleJwks();
+  const gmailOAuth = buildGmailOAuthAdapters(config, logger, googleJwks);
   const digestGeneration = createDigestGenerationService({
     digests,
     buildPipeline: buildDigestUserPipeline(config, firestore, logger, gmailOAuth),
@@ -83,7 +88,10 @@ function buildAppDependencies(config: Config, logger: Logger): AppDependencies {
     // An empty audience list (possible only outside production, where the variable is
     // optional) rejects every token — /v1/ fails closed rather than open until the local
     // environment sets GOOGLE_OAUTH_AUDIENCE.
-    idTokenVerifier: createGoogleIdTokenVerifier({ audience: config.googleOAuthAudience ?? [] }),
+    idTokenVerifier: createGoogleIdTokenVerifier({
+      audience: config.googleOAuthAudience ?? [],
+      jwks: googleJwks,
+    }),
     usersRepository,
     rateLimiter: createRateLimiter({
       limit: config.rateLimitPerMinute,
@@ -113,7 +121,11 @@ interface GmailOAuthAdapters {
   readonly verifyConsentIdToken: (idToken: string) => Promise<string | null>;
 }
 
-function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdapters | null {
+function buildGmailOAuthAdapters(
+  config: Config,
+  logger: Logger,
+  googleJwks: ReturnType<typeof createGoogleJwks>,
+): GmailOAuthAdapters | null {
   if (
     config.googleOAuthClientId === undefined ||
     config.googleOAuthClientSecret === undefined ||
@@ -128,9 +140,12 @@ function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdap
   );
   // Bound to the OAuth client the exchange itself uses — the id_token in a code-exchange
   // response carries that client as its `aud`, which may differ from the inbound-request
-  // audience list (GOOGLE_OAUTH_AUDIENCE).
-  const consentIdTokenVerifier = createGoogleIdTokenVerifier({
+  // audience list (GOOGLE_OAUTH_AUDIENCE). Subject profile, not the sign-in one: the
+  // authorization requests no `email` scope, so this id_token may legitimately omit the
+  // email claim, and account-binding only ever reads `sub`.
+  const consentIdTokenVerifier = createGoogleIdTokenSubjectVerifier({
     audience: [config.googleOAuthClientId],
+    jwks: googleJwks,
   });
   return {
     refreshTokenStore,
@@ -145,7 +160,7 @@ function buildGmailOAuthAdapters(config: Config, logger: Logger): GmailOAuthAdap
     }),
     verifyConsentIdToken: async (idToken) => {
       try {
-        return (await consentIdTokenVerifier.verify(idToken)).googleUserId;
+        return (await consentIdTokenVerifier.verifySubject(idToken)).googleUserId;
       } catch (error) {
         if (error instanceof IdTokenRejectedError) {
           // An invalid token is the client's problem (account_mismatch), not an outage.

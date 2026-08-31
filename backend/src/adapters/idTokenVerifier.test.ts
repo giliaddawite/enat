@@ -1,6 +1,7 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWK } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
+  createGoogleIdTokenSubjectVerifier,
   createGoogleIdTokenVerifier,
   IdTokenRejectedError,
   IdTokenVerificationUnavailableError,
@@ -201,6 +202,17 @@ describe('createGoogleIdTokenVerifier', () => {
     expect((error as IdTokenRejectedError).reason).toBe('invalid_claims');
   });
 
+  it('rejects a token that omits the email claim — sign-in requires it, unlike the subject profile', async () => {
+    const token = await keys.sign({ sub: 'google-user-123' });
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_claims');
+  });
+
   it('never puts the raw token in the rejection message', async () => {
     const token = await keys.sign(VALID_CLAIMS, { expiresInSeconds: -10, issuedAtSecondsAgo: 20 });
 
@@ -209,5 +221,82 @@ describe('createGoogleIdTokenVerifier', () => {
       .catch((caught: unknown) => caught)) as IdTokenRejectedError;
 
     expect(error.message).not.toContain(token);
+  });
+});
+
+describe('createGoogleIdTokenSubjectVerifier', () => {
+  let keys: KeySet;
+
+  beforeAll(async () => {
+    keys = await buildKeySet();
+  });
+
+  function subjectVerifier() {
+    return createGoogleIdTokenSubjectVerifier({ audience: [AUDIENCE], jwks: keys.jwks });
+  }
+
+  it('accepts a token that carries only a subject — no email claim required', async () => {
+    // The shape a Gmail-consent exchange id_token takes when the authorization requested
+    // only `openid` + the Gmail scopes (TICKET-202's real on-device flow).
+    const token = await keys.sign({ sub: 'google-user-123' });
+
+    await expect(subjectVerifier().verifySubject(token)).resolves.toEqual({
+      googleUserId: 'google-user-123',
+    });
+  });
+
+  it('still returns only the subject when email claims happen to be present', async () => {
+    const token = await keys.sign(VALID_CLAIMS);
+
+    await expect(subjectVerifier().verifySubject(token)).resolves.toEqual({
+      googleUserId: 'google-user-123',
+    });
+  });
+
+  it('rejects an expired token — the narrower schema does not skip time checks', async () => {
+    const token = await keys.sign(
+      { sub: 'google-user-123' },
+      { expiresInSeconds: -10, issuedAtSecondsAgo: 20 },
+    );
+
+    const error = await subjectVerifier()
+      .verifySubject(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('expired_token');
+  });
+
+  it('rejects a token issued for a different OAuth client', async () => {
+    const token = await keys.sign({ sub: 'google-user-123' }, { audience: OTHER_AUDIENCE });
+
+    const error = await subjectVerifier()
+      .verifySubject(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('wrong_audience');
+  });
+
+  it('rejects a token signed by a key Google never published', async () => {
+    const token = await keys.wrongKeySign({ sub: 'google-user-123' });
+
+    const error = await subjectVerifier()
+      .verifySubject(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
+
+  it('rejects a token without a subject', async () => {
+    const token = await keys.sign({ email: 'mom@example.com' });
+
+    const error = await subjectVerifier()
+      .verifySubject(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_claims');
   });
 });

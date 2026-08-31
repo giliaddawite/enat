@@ -90,19 +90,39 @@ export interface GmailConsentService {
   connect(uid: string, authCode: string): Promise<void>;
 }
 
+/** Internal-log labels only — the client-facing code for every case is `account_mismatch`. */
+type AccountBindingFailure = 'id_token_absent' | 'id_token_unverifiable' | 'subject_mismatch';
+
+async function accountBindingFailure(
+  uid: string,
+  grant: AuthCodeGrant,
+  verifyConsentIdToken: GmailConsentDependencies['verifyConsentIdToken'],
+): Promise<AccountBindingFailure | null> {
+  if (grant.idToken === null) {
+    return 'id_token_absent';
+  }
+  const subject = await verifyConsentIdToken(grant.idToken);
+  if (subject === null) {
+    return 'id_token_unverifiable';
+  }
+  return subject === uid ? null : 'subject_mismatch';
+}
+
 export function createGmailConsentService(deps: GmailConsentDependencies): GmailConsentService {
   return {
     async connect(uid, authCode) {
       const grant = await deps.exchangeAuthCode(authCode);
 
       // Identity comes first: nothing about a grant matters until it provably belongs to
-      // the authenticated user. The log line carries the uid and outcome only — never
-      // which check failed in a way that names the other account.
-      const grantSubject =
-        grant.idToken === null ? null : await deps.verifyConsentIdToken(grant.idToken);
-      if (grantSubject === null || grantSubject !== uid) {
+      // the authenticated user. The log line names which case occurred — that reaches
+      // operators only, so live debugging can tell a missing id_token from a mismatched
+      // one — but never any identifier from the token; the client still sees the single
+      // collapsed `account_mismatch`, so a forger learns nothing about which check failed.
+      const bindingFailure = await accountBindingFailure(uid, grant, deps.verifyConsentIdToken);
+      if (bindingFailure !== null) {
         deps.logger?.warn('gmail consent rejected: grant is not bound to the signed-in account', {
           uid,
+          case: bindingFailure,
         });
         throw new GmailConsentRejectedError(
           'account_mismatch',
