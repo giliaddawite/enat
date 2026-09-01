@@ -1,6 +1,7 @@
 package com.enat.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -32,6 +33,14 @@ object EnatRoutes {
  *
  * [onRestartSetup] re-enters the setup flow — the fix for a revoked Gmail grant,
  * a never-connected account, or a dead sign-in session (TICKET-204).
+ *
+ * Every back arrow is guarded twice, and both layers matter. [dropUnlessResumed]
+ * swallows clicks unless this entry's lifecycle is RESUMED, so a tap during a
+ * transition — or the second tap of a rapid double-click, which lands after the
+ * entry leaves RESUMED — never fires. And [androidx.navigation.NavController.navigateUp]
+ * (unlike a bare popBackStack) refuses to pop the last entry, so even a tap that
+ * slips past the lifecycle gate cannot pop the hub and leave a blank NavHost —
+ * exactly the bug a double-clicked back arrow produced on device.
  */
 @Composable
 fun EnatNavHost(onRestartSetup: () -> Unit) {
@@ -47,7 +56,7 @@ fun EnatNavHost(onRestartSetup: () -> Unit) {
         }
         composable(EnatRoutes.DIGEST) {
             DigestRoute(
-                onBack = { navController.popBackStack() },
+                onBack = dropUnlessResumed { navController.navigateUp() },
                 onOpenDetail = { messageId -> navController.navigate(EnatRoutes.digestDetail(messageId)) },
                 onReconnect = onRestartSetup,
                 onNavigateToSetup = onRestartSetup,
@@ -60,16 +69,16 @@ fun EnatNavHost(onRestartSetup: () -> Unit) {
                     navArgument(DigestDetailViewModel.MESSAGE_ID_ARG) { type = NavType.StringType },
                 ),
         ) {
-            DigestDetailRoute(onBack = { navController.popBackStack() })
+            DigestDetailRoute(onBack = dropUnlessResumed { navController.navigateUp() })
         }
         composable(EnatRoutes.VERSE) {
-            VersePlaceholderScreen(onBack = { navController.popBackStack() })
+            VersePlaceholderScreen(onBack = dropUnlessResumed { navController.navigateUp() })
         }
         composable(EnatRoutes.FAMILY_CALL) {
-            FamilyCallRoute(onBack = { navController.popBackStack() })
+            FamilyCallRoute(onBack = dropUnlessResumed { navController.navigateUp() })
         }
         composable(EnatRoutes.FAMILY_SETTINGS) {
-            FamilySettingsRoute(onBack = { navController.popBackStack() })
+            FamilySettingsRoute(onBack = dropUnlessResumed { navController.navigateUp() })
         }
     }
 }
