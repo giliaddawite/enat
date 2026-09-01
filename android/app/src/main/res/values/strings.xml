@@ -85,7 +85,7 @@
     <string name="setup_step_notifications">4. Allow notifications</string>
     <!-- TalkBack state description for the active step in the setup step list. -->
     <string name="setup_step_current">Current step</string>
-    <string name="setup_intro">Three steps connect this phone to Gmail. Tap the button to begin.</string>
+    <string name="setup_intro">A few steps connect this phone to Gmail. Tap the button to begin.</string>
     <string name="setup_sign_in_button">Sign in with Google</string>
     <string name="setup_status_signing_in">Signing in…</string>
     <string name="setup_status_authorizing">Waiting for Gmail permission…</string>
@@ -93,7 +93,7 @@
     <string name="setup_success_title">All set!</string>
     <string name="setup_success_body">Gmail is connected. The app is ready to use.</string>
     <string name="setup_done_button">Start</string>
-    <string name="setup_notifications_intro">Every morning a reminder about the day\'s verse will appear. On the next screen, tap “Allow”.</string>
+    <string name="setup_notifications_intro">Every morning a reminder about the day\'s verse will appear. On the next screen, allow the notification.</string>
     <string name="setup_notifications_allow_button">Continue</string>
     <string name="setup_retry_button">Try again</string>
     <string name="setup_error_sign_in">Sign-in did not finish. Please try again.</string>

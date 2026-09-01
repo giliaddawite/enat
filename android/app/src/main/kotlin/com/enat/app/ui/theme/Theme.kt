@@ -14,8 +14,10 @@ import androidx.compose.ui.graphics.Color
 // onSecondaryContainer, tertiary/onTertiary, tertiaryContainer/
 // onTertiaryContainer, background/onBackground, surface/onSurface,
 // surfaceVariant/onSurfaceVariant, error/onError, errorContainer/
-// onErrorContainer, outline. Roles not listed are NOT audited — audit before
-// first use and add them here explicitly.
+// onErrorContainer, outline. Cross-role pairings audited beyond the on-color
+// pairs: primary text over surfaceVariant (6.52:1 light, 8.39:1 dark — the
+// verse card's reference lines). Roles and pairings not listed are NOT
+// audited — audit before first use and add them here explicitly.
 private val LightColors =
     lightColorScheme(
         primary = Color(0xFF1B5E20),

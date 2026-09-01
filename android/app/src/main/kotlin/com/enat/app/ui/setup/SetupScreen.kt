@@ -232,6 +232,10 @@ private fun ProgressContent(
 @Composable
 private fun NotificationPermissionContent(onAllowNotifications: () -> Unit) {
     Text(
+        // House rule for permission flows: the intro describes the action
+        // ("allow the notification"), never quoting the system dialog's button
+        // label — text the app doesn't own, rendered in the SYSTEM language and
+        // register, both of which can differ from the app's.
         text = stringResource(R.string.setup_notifications_intro),
         style = MaterialTheme.typography.titleLarge,
         textAlign = TextAlign.Center,
