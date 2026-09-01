@@ -173,6 +173,10 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // The daily verse reminder (TICKET-205): WorkManager persists the schedule
+    // across process death and reboot, which is exactly the acceptance criterion.
+    implementation(libs.androidx.work.runtime.ktx)
+
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.okhttp)
@@ -194,6 +198,7 @@ dependencies {
     implementation(libs.firebase.crashlytics)
 
     testImplementation(libs.junit)
+    testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.androidx.navigation.testing)

@@ -2,6 +2,8 @@ package com.enat.app.di
 
 import com.enat.app.data.greeting.ClockGreetingRepository
 import com.enat.app.data.greeting.GreetingRepository
+import com.enat.app.notifications.AndroidNotificationPermissionGateway
+import com.enat.app.notifications.NotificationPermissionGateway
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -15,6 +17,11 @@ import javax.inject.Singleton
 abstract class AppModule {
     @Binds
     abstract fun bindGreetingRepository(impl: ClockGreetingRepository): GreetingRepository
+
+    @Binds
+    abstract fun bindNotificationPermissionGateway(
+        impl: AndroidNotificationPermissionGateway,
+    ): NotificationPermissionGateway
 
     companion object {
         // Clock is injected (never read ad hoc) so time-dependent logic stays

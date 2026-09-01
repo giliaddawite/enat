@@ -1,5 +1,6 @@
 package com.enat.app.ui.setup
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -50,6 +51,11 @@ fun SetupRoute(
         rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
             viewModel.onConsentResult(result.resultCode, result.data)
         }
+    // Granted or denied, setup finishes either way — the reminder is optional.
+    val notificationPermissionLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            viewModel.onNotificationPermissionResult()
+        }
     val state = uiState
     if (state is SetupUiState.AwaitingConsent) {
         // Keyed on the state instance: Google's consent screen launches once per
@@ -61,6 +67,9 @@ fun SetupRoute(
         uiState = uiState,
         onSignIn = { viewModel.startSignIn(activity) },
         onRetry = { viewModel.retry(activity) },
+        onAllowNotifications = {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        },
         onDone = onSetupFinished,
     )
 }
@@ -78,6 +87,7 @@ fun SetupScreen(
     uiState: SetupUiState,
     onSignIn: () -> Unit,
     onRetry: () -> Unit,
+    onAllowNotifications: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,6 +115,7 @@ fun SetupScreen(
                 SetupUiState.Authorizing, is SetupUiState.AwaitingConsent ->
                     ProgressContent(R.string.setup_status_authorizing)
                 SetupUiState.Connecting -> ProgressContent(R.string.setup_status_connecting)
+                SetupUiState.NotificationPermissionStep -> NotificationPermissionContent(onAllowNotifications)
                 SetupUiState.Success -> SuccessContent(onDone)
                 is SetupUiState.Error -> ErrorContent(uiState.kind, onRetry)
             }
@@ -112,12 +123,13 @@ fun SetupScreen(
     }
 }
 
-/** Which of the three numbered steps the state belongs to, for the step list. */
+/** Which of the four numbered steps the state belongs to, for the step list. */
 private fun currentStep(uiState: SetupUiState): Int =
     when (uiState) {
         SetupUiState.ConfigMissing, SetupUiState.SignInStep, SetupUiState.SigningIn -> 1
         SetupUiState.Authorizing, is SetupUiState.AwaitingConsent -> 2
-        SetupUiState.Connecting, SetupUiState.Success -> 3
+        SetupUiState.Connecting -> 3
+        SetupUiState.NotificationPermissionStep, SetupUiState.Success -> 4
         is SetupUiState.Error ->
             when (uiState.kind) {
                 SetupErrorKind.SIGN_IN_FAILED -> 1
@@ -137,6 +149,7 @@ private fun StepList(currentStep: Int) {
             R.string.setup_step_sign_in,
             R.string.setup_step_gmail,
             R.string.setup_step_connect,
+            R.string.setup_step_notifications,
         )
     Column(
         modifier =
@@ -208,6 +221,31 @@ private fun ProgressContent(
                 .size(64.dp)
                 // The status text above is the announcement; the spinner is decoration.
                 .clearAndSetSemantics { },
+    )
+}
+
+/**
+ * The final installer step (TICKET-205): explain the morning verse reminder, then
+ * hand off to the system permission dialog. There is no separate skip control —
+ * declining the system dialog is the skip, and setup finishes either way.
+ */
+@Composable
+private fun NotificationPermissionContent(onAllowNotifications: () -> Unit) {
+    Text(
+        text = stringResource(R.string.setup_notifications_intro),
+        style = MaterialTheme.typography.titleLarge,
+        textAlign = TextAlign.Center,
+        modifier =
+            Modifier
+                .padding(top = 24.dp)
+                .testTag("setup_notifications")
+                // Arriving here replaces the connecting spinner — announce it.
+                .semantics { liveRegion = LiveRegionMode.Polite },
+    )
+    PrimaryActionButton(
+        label = stringResource(R.string.setup_notifications_allow_button),
+        onClick = onAllowNotifications,
+        modifier = Modifier.padding(top = 32.dp),
     )
 }
 

@@ -12,6 +12,7 @@ import com.enat.app.data.auth.GoogleAuthConfig
 import com.enat.app.data.auth.GoogleSignInGateway
 import com.enat.app.data.auth.SignInOutcome
 import com.enat.app.data.setup.SetupStateRepository
+import com.enat.app.notifications.NotificationPermissionGateway
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -39,6 +40,9 @@ class SetupViewModelTest {
     private val consentRepository = FakeConsentRepository(ConsentSubmissionResult.Accepted)
     private val setupStateRepository = FakeSetupStateRepository()
 
+    // Most tests run as on a pre-13 device (or one already granted): no extra step.
+    private val notificationPermissionGateway = FakeNotificationPermissionGateway(permissionUndecided = false)
+
     private fun viewModel(configured: Boolean = true) =
         SetupViewModel(
             config =
@@ -49,6 +53,7 @@ class SetupViewModelTest {
             authorizationGateway = authorizationGateway,
             consentRepository = consentRepository,
             setupStateRepository = setupStateRepository,
+            notificationPermissionGateway = notificationPermissionGateway,
         )
 
     /** Collects every distinct state, including intermediates, for whole-machine assertions. */
@@ -264,6 +269,65 @@ class SetupViewModelTest {
             assertEquals(2, authorizationGateway.requestInvocations)
             assertTrue(setupStateRepository.complete)
         }
+
+    @Test
+    fun `an undecided notification permission adds the permission step before success`() =
+        runTest {
+            notificationPermissionGateway.permissionUndecided = true
+            val viewModel = viewModel()
+
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            assertEquals(SetupUiState.NotificationPermissionStep, viewModel.uiState.value)
+            // Setup is already complete — the notification ask is a bonus, not a gate.
+            assertTrue(setupStateRepository.complete)
+        }
+
+    @Test
+    fun `a granted permission dialog finishes setup`() =
+        runTest {
+            notificationPermissionGateway.permissionUndecided = true
+            val viewModel = viewModel()
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            viewModel.onNotificationPermissionResult()
+
+            assertEquals(SetupUiState.Success, viewModel.uiState.value)
+        }
+
+    @Test
+    fun `a denied permission dialog still finishes setup - no nagging`() =
+        runTest {
+            notificationPermissionGateway.permissionUndecided = true
+            val viewModel = viewModel()
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            // The route reports the dialog's answer the same way for grant and
+            // denial; either way setup ends at Success and never re-asks.
+            viewModel.onNotificationPermissionResult()
+
+            assertEquals(SetupUiState.Success, viewModel.uiState.value)
+            assertTrue(setupStateRepository.complete)
+        }
+
+    @Test
+    fun `a stray permission result outside the permission step changes nothing`() =
+        runTest {
+            val viewModel = viewModel()
+
+            viewModel.onNotificationPermissionResult()
+
+            assertEquals(SetupUiState.SignInStep, viewModel.uiState.value)
+        }
+
+    private class FakeNotificationPermissionGateway(
+        var permissionUndecided: Boolean,
+    ) : NotificationPermissionGateway {
+        override fun needsRequest(): Boolean = permissionUndecided
+    }
 
     private class FakeSignInGateway(
         var outcome: SignInOutcome,

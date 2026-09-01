@@ -1,15 +1,23 @@
 package com.enat.app
 
 import android.app.Application
+import com.enat.app.notifications.VerseReminderScheduler
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class EnatApplication : Application() {
+    @Inject
+    lateinit var verseReminderScheduler: VerseReminderScheduler
+
     override fun onCreate() {
         super.onCreate()
         enableCrashReportingForReleaseBuilds()
+        // Every app start re-asserts the daily verse reminder with KEEP — a no-op
+        // when the persisted schedule already exists (TICKET-205).
+        verseReminderScheduler.scheduleDailyReminder()
     }
 
     private fun enableCrashReportingForReleaseBuilds() {
