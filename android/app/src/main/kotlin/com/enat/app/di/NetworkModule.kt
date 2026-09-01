@@ -2,6 +2,7 @@ package com.enat.app.di
 
 import com.enat.app.BuildConfig
 import com.enat.app.data.auth.AuthApi
+import com.enat.app.data.auth.AuthInterceptor
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,12 +26,15 @@ object NetworkModule {
             ignoreUnknownKeys = true
         }
 
+    // Every API call is authenticated (TICKET-204): the interceptor silently mints
+    // a Google ID token per request/session and attaches it as a Bearer header.
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient =
+    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(authInterceptor)
             .build()
 
     // BuildConfig.API_BASE_URL already ends in /v1/ — the app never calls

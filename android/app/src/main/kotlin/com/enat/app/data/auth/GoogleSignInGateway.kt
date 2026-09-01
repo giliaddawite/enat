@@ -22,4 +22,11 @@ sealed interface SignInOutcome {
  */
 interface GoogleSignInGateway {
     suspend fun signIn(activity: Activity): SignInOutcome
+
+    /**
+     * Mints a fresh ID token without showing UI (auto-select over the already
+     * authorized account). Powers per-request auth on every /v1/ call after setup;
+     * failure means "signed out" and routes back to the setup flow's sign-in.
+     */
+    suspend fun silentSignIn(): SignInOutcome
 }
