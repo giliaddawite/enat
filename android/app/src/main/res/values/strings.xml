@@ -7,9 +7,39 @@
     <string name="home_greeting_afternoon">Good afternoon</string>
     <string name="home_greeting_evening">Good evening</string>
     <string name="home_loading">Loading…</string>
-    <string name="home_error">Something went wrong. Please try again.</string>
-    <string name="home_refresh_button">Refresh</string>
-    <string name="home_retry_button">Try again</string>
+
+    <!-- Home hub (TICKET-203): three oversized buttons plus date/time. -->
+    <string name="hub_button_digest">Today\'s mail</string>
+    <string name="hub_button_verse">Today\'s verse</string>
+    <string name="hub_button_call">Call family</string>
+    <string name="hub_call_not_configured">No family phone number has been set up yet.</string>
+    <string name="hub_version">Version %1$s</string>
+    <!-- TalkBack label for the caregiver-only long-press on the version text. -->
+    <string name="hub_open_settings_action">Open family number settings</string>
+    <string name="back_button">Back</string>
+    <string name="dial_error">Calling is not possible on this device.</string>
+
+    <!-- Verse placeholder until TICKET-205 builds the real screen. -->
+    <string name="verse_title">Today\'s verse</string>
+    <string name="verse_placeholder_body">The daily verse will arrive here soon.</string>
+
+    <!-- Family call picker (shown when more than one contact is configured). -->
+    <string name="family_call_title">Call family</string>
+    <string name="family_call_choose">Who would you like to call?</string>
+
+    <!-- Caregiver quick-dial settings (hidden behind long-pressing the version text). -->
+    <string name="settings_title">Family phone numbers</string>
+    <string name="settings_intro">The “Call family” button on the home screen dials these numbers.</string>
+    <string name="settings_empty">No numbers have been added yet.</string>
+    <string name="settings_name_label">Name</string>
+    <string name="settings_phone_label">Phone number</string>
+    <string name="settings_add_button">Add</string>
+    <string name="settings_delete_description">Delete %1$s</string>
+    <string name="settings_validation_error">A name and a valid phone number are required.</string>
+
+    <!-- Digest screen placeholder title (real screen lands with TICKET-204). -->
+    <string name="digest_title">Today\'s mail</string>
+    <string name="digest_placeholder_body">The mail page is being prepared.</string>
 
     <!-- One-time setup flow (TICKET-202). Run by the installer, still Amharic-first. -->
     <string name="setup_title">Set up Enat</string>

@@ -9,6 +9,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 // No contentDescription override: TalkBack reads the visible label itself, and a
@@ -16,12 +18,16 @@ import androidx.compose.ui.unit.dp
 // anti-pattern). Text buttons only ever need their label.
 // Pass [colors] only as an audited role pair from Theme.kt (the default is
 // primary/onPrimary); hosts on tinted surfaces override it, e.g. ReconnectCard.
+// [minHeight] may only grow past the 64dp floor (the hub's oversized buttons),
+// and [textStyle] must stay a Type.kt role — never an ad-hoc size.
 @Composable
 fun PrimaryActionButton(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     colors: ButtonColors = ButtonDefaults.buttonColors(),
+    minHeight: Dp = 64.dp,
+    textStyle: TextStyle = MaterialTheme.typography.labelLarge,
 ) {
     Button(
         onClick = onClick,
@@ -30,8 +36,8 @@ fun PrimaryActionButton(
             modifier
                 .fillMaxWidth()
                 // 64dp minimum touch target — deliberately above the 48dp guideline.
-                .heightIn(min = 64.dp),
+                .heightIn(min = maxOf(minHeight, 64.dp)),
     ) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge)
+        Text(text = label, style = textStyle)
     }
 }

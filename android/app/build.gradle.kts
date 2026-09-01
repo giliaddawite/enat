@@ -165,6 +165,7 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.androidx.navigation.compose)
 
     // Offline-first cache (digest, quick-dial contacts). Room is the CLAUDE.md-mandated
     // store: every screen must render from this cache with no network.
