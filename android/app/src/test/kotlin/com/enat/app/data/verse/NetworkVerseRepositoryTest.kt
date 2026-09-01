@@ -135,6 +135,37 @@ class NetworkVerseRepositoryTest {
         }
 
     @Test
+    fun `a hostile ETag is dropped instead of poisoning revalidation`() =
+        runTest {
+            // Outside printable ASCII: replaying it as If-None-Match would make
+            // OkHttp throw IllegalArgumentException on every later load — and a
+            // persisted value makes that crash sticky. addHeaderLenient bypasses
+            // MockWebServer's own validation, like a hostile server would.
+            server.enqueue(
+                MockResponse().setResponseCode(200).addHeaderLenient("ETag", "\"v1é\"").setBody(verseJson),
+            )
+            val first = repository.fetchToday()
+            assertTrue(first is VerseSyncResult.Success)
+            server.takeRequest()
+
+            server.enqueue(MockResponse().setResponseCode(200).setHeader("ETag", "\"v2\"").setBody(verseJson))
+            val second = repository.fetchToday()
+
+            // No crash, and the poisoned value was never persisted: the
+            // revalidation simply went out unconditional.
+            assertTrue(second is VerseSyncResult.Success)
+            assertNull(server.takeRequest().getHeader("If-None-Match"))
+        }
+
+    @Test
+    fun `a malformed body maps to Failed instead of crashing`() =
+        runTest {
+            server.enqueue(MockResponse().setResponseCode(200).setBody("not json at all"))
+
+            assertEquals(VerseSyncResult.Failed, repository.fetchToday())
+        }
+
+    @Test
     fun `401 maps to SignedOut`() =
         runTest {
             server.enqueue(MockResponse().setResponseCode(401))

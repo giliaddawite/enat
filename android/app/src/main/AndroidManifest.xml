@@ -3,8 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 13+ runtime permission for the daily verse reminder (TICKET-205).
-         Requested once, as the setup flow's final step; a denial is respected —
-         the app never nags and works fully without notifications. -->
+         Asked at most once, as the setup flow's final step — a persisted flag
+         (SetupStateRepository) keeps restarted setups from re-asking, so a denial
+         is respected for good: the app never nags and works fully without
+         notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Package-visibility declaration (Android 11+): without it, the digest

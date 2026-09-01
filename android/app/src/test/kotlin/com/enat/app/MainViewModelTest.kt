@@ -37,5 +37,9 @@ class MainViewModelTest {
         override fun markSetupComplete() {
             complete = true
         }
+
+        override fun isNotificationPermissionRequested(): Boolean = false
+
+        override fun markNotificationPermissionRequested() = Unit
     }
 }

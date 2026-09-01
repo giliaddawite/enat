@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.enat.app.data.setup.SetupStateRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Clock
 import java.time.Duration
@@ -13,23 +14,39 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Schedules the daily verse reminder (TICKET-205): a 24h periodic work request,
- * first run delayed into the 7:00–9:00 morning window, enqueued at every app start
- * with KEEP so the one persisted schedule survives untouched. WorkManager persists
- * its work database across process death and reboot — that persistence is the
- * "fires within the target window even after device reboot" criterion.
+ * Schedules the daily verse reminder (TICKET-205) — behind an interface so
+ * SetupViewModel stays testable with a fake.
+ */
+interface VerseReminderScheduler {
+    fun scheduleDailyReminder()
+}
+
+/**
+ * The WorkManager implementation: a 24h periodic work request, first run delayed
+ * into the 7:00–9:00 morning window, enqueued at every app start with KEEP so the
+ * one persisted schedule survives untouched. WorkManager persists its work
+ * database across process death and reboot — that persistence is the "fires
+ * within the target window even after device reboot" criterion.
+ *
+ * Nothing is scheduled until setup has completed: reminders are part of the
+ * consented experience, and on API 26–32 there is no POST_NOTIFICATIONS gate, so
+ * an abandoned install must never wake anyone at 7AM. The setup flow calls
+ * [scheduleDailyReminder] right after marking completion, so the first schedule
+ * anchors immediately; app starts re-assert it from then on.
  *
  * No constraints: the worker is network-free and near-instant, and any constraint
  * could only delay it past the window.
  */
 @Singleton
-class VerseReminderScheduler
+class WorkManagerVerseReminderScheduler
     @Inject
     constructor(
         @ApplicationContext private val context: Context,
         private val clock: Clock,
-    ) {
-        fun scheduleDailyReminder() {
+        private val setupStateRepository: SetupStateRepository,
+    ) : VerseReminderScheduler {
+        override fun scheduleDailyReminder() {
+            if (!setupStateRepository.isSetupComplete()) return
             val request =
                 PeriodicWorkRequestBuilder<VerseNotificationWorker>(Duration.ofDays(1))
                     .setInitialDelay(delayUntilReminderWindow(ZonedDateTime.now(clock)))

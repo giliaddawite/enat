@@ -3,6 +3,7 @@ package com.enat.app.data.verse
 import com.enat.app.data.auth.SignedOutException
 import com.enat.app.data.db.VerseDao
 import com.enat.app.data.db.VerseEntity
+import kotlinx.serialization.SerializationException
 import java.io.IOException
 import java.net.HttpURLConnection
 import javax.inject.Inject
@@ -56,11 +57,15 @@ class NetworkVerseRepository
                 } catch (unreachable: IOException) {
                     // Offline or the server is down — the cache carries the screen.
                     return VerseSyncResult.Offline
+                } catch (malformed: SerializationException) {
+                    // A body that isn't the contract is a server problem, not a
+                    // crash: same retryable answer as any other bad response.
+                    return VerseSyncResult.Failed
                 }
             val body = response.body()
             if (response.isSuccessful && body != null) {
                 val verse = body.toDomain()
-                persist(verse, etag = response.headers()["ETag"])
+                persist(verse, etag = headerSafe(response.headers()["ETag"]))
                 return VerseSyncResult.Success(verse)
             }
             return when (response.code()) {
@@ -86,6 +91,15 @@ class NetworkVerseRepository
                 ),
             )
         }
+
+        /**
+         * OkHttp refuses request-header values outside printable ASCII with an
+         * IllegalArgumentException — which no IOException catch sees, and which a
+         * persisted hostile ETag would rethrow on every later revalidation: a
+         * sticky crash. Validate before persisting; a dropped ETag only makes the
+         * next request unconditional.
+         */
+        private fun headerSafe(etag: String?): String? = etag?.takeIf { value -> value.all { it in ' '..'~' } }
 
         private fun VerseEntity.toDomain(): Verse =
             Verse(

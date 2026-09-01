@@ -21,27 +21,27 @@ class VerseReminderWindowTest {
 
     @Test
     fun `before the window the first run waits for 7am today`() {
-        assertEquals(Duration.ofMinutes(90), VerseReminderScheduler.delayUntilReminderWindow(at(5, 30)))
+        assertEquals(Duration.ofMinutes(90), WorkManagerVerseReminderScheduler.delayUntilReminderWindow(at(5, 30)))
     }
 
     @Test
     fun `at the window start the delay is zero`() {
-        assertEquals(Duration.ZERO, VerseReminderScheduler.delayUntilReminderWindow(at(7, 0)))
+        assertEquals(Duration.ZERO, WorkManagerVerseReminderScheduler.delayUntilReminderWindow(at(7, 0)))
     }
 
     @Test
     fun `inside the window an app start may remind today`() {
-        assertEquals(Duration.ZERO, VerseReminderScheduler.delayUntilReminderWindow(at(8, 15)))
+        assertEquals(Duration.ZERO, WorkManagerVerseReminderScheduler.delayUntilReminderWindow(at(8, 15)))
     }
 
     @Test
     fun `at the window end the first run waits for 7am tomorrow`() {
-        assertEquals(Duration.ofHours(22), VerseReminderScheduler.delayUntilReminderWindow(at(9, 0)))
+        assertEquals(Duration.ofHours(22), WorkManagerVerseReminderScheduler.delayUntilReminderWindow(at(9, 0)))
     }
 
     @Test
     fun `after the window the first run waits for 7am tomorrow`() {
-        assertEquals(Duration.ofHours(10), VerseReminderScheduler.delayUntilReminderWindow(at(21, 0)))
+        assertEquals(Duration.ofHours(10), WorkManagerVerseReminderScheduler.delayUntilReminderWindow(at(21, 0)))
     }
 
     @Test
@@ -50,6 +50,6 @@ class VerseReminderWindowTest {
         // long, so 21:00 on Oct 31 is 10 wall-clock hours but 11 real hours
         // before 07:00 — the zone-aware math must count the real ones.
         val beforeFallBack = ZonedDateTime.of(2026, 10, 31, 21, 0, 0, 0, zone)
-        assertEquals(Duration.ofHours(11), VerseReminderScheduler.delayUntilReminderWindow(beforeFallBack))
+        assertEquals(Duration.ofHours(11), WorkManagerVerseReminderScheduler.delayUntilReminderWindow(beforeFallBack))
     }
 }

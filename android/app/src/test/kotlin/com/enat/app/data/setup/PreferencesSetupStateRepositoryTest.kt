@@ -26,4 +26,16 @@ class PreferencesSetupStateRepositoryTest {
 
         assertTrue(PreferencesSetupStateRepository(context).isSetupComplete())
     }
+
+    @Test
+    fun `the notification permission has not been requested on a clean install`() {
+        assertFalse(PreferencesSetupStateRepository(context).isNotificationPermissionRequested())
+    }
+
+    @Test
+    fun `marking the permission requested persists across repository instances`() {
+        PreferencesSetupStateRepository(context).markNotificationPermissionRequested()
+
+        assertTrue(PreferencesSetupStateRepository(context).isNotificationPermissionRequested())
+    }
 }
