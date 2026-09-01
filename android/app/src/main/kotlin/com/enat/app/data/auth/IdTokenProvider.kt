@@ -41,7 +41,16 @@ class SessionIdTokenProvider
         private val json: Json,
     ) : IdTokenProvider {
         private val mutex = Mutex()
+
+        // @Volatile because invalidate() writes from OkHttp's network threads
+        // WITHOUT taking the mutex (see below) — without the barrier, a reader
+        // inside idToken()'s critical section could miss the invalidation and
+        // keep replaying a server-rejected token until its exp. cachedExpiry is
+        // marked too so the pair can never be observed torn.
+        @Volatile
         private var cachedToken: String? = null
+
+        @Volatile
         private var cachedExpiry: Instant = Instant.EPOCH
 
         override suspend fun idToken(): String? =
@@ -53,7 +62,10 @@ class SessionIdTokenProvider
                 when (val outcome = signInGateway.silentSignIn()) {
                     is SignInOutcome.SignedIn -> {
                         cachedToken = outcome.idToken
-                        cachedExpiry = expiryOf(outcome.idToken)
+                        // Clamped: a bogus far-future exp claim must not pin a
+                        // token in the cache — Google ID tokens live ~1 hour.
+                        cachedExpiry =
+                            minOf(expiryOf(outcome.idToken), clock.instant().plus(MAX_CACHE_LIFETIME))
                         outcome.idToken
                     }
                     // Cancelled cannot happen without UI; either way there is no token.
@@ -65,8 +77,10 @@ class SessionIdTokenProvider
             }
 
         override fun invalidate() {
-            // Plain assignment: invalidate must not block a network thread on the
-            // mutex, and a racing mint simply repopulates the cache with a fresh token.
+            // Deliberately unsynchronized: invalidate must not block a network
+            // thread on the mutex, and a racing mint simply repopulates the cache
+            // with a fresh token. The @Volatile on cachedToken is what makes this
+            // write visible to readers holding the mutex.
             cachedToken = null
         }
 
@@ -91,5 +105,8 @@ class SessionIdTokenProvider
         private companion object {
             /** Re-mint while the token still has 5 minutes left, so an in-flight request never expires. */
             val EXPIRY_SLACK: Duration = Duration.ofMinutes(5)
+
+            /** Hard cap on how long a mint is trusted, whatever its exp claim says. */
+            val MAX_CACHE_LIFETIME: Duration = Duration.ofHours(1)
         }
     }

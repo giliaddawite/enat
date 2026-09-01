@@ -8,7 +8,9 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 import java.io.IOException
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Base64
 
@@ -92,6 +94,26 @@ class SessionIdTokenProviderTest {
         }
 
     @Test
+    fun `a far-future exp claim cannot pin the token past the one-hour cap`() =
+        runTest {
+            val mutableClock = MutableClock(now)
+            val suspicious = tokenExpiringAt(now.plusSeconds(365L * 24 * 3600))
+            val fresh = tokenExpiringAt(now.plusSeconds(400L * 24 * 3600))
+            val gateway =
+                FakeSignInGateway(
+                    mutableListOf(SignInOutcome.SignedIn(suspicious), SignInOutcome.SignedIn(fresh)),
+                )
+            val provider = SessionIdTokenProvider(gateway, mutableClock, json)
+
+            assertEquals(suspicious, provider.idToken())
+            mutableClock.advance(Duration.ofHours(2))
+            // Two hours later the clamped cache lifetime (1h) has passed — the
+            // bogus exp claim must not keep the old token alive.
+            assertEquals(fresh, provider.idToken())
+            assertEquals(2, gateway.silentSignInCalls)
+        }
+
+    @Test
     fun `a token with an unreadable payload is used once but never cached`() =
         runTest {
             val fresh = tokenExpiringAt(now.plusSeconds(3600))
@@ -105,6 +127,20 @@ class SessionIdTokenProviderTest {
             assertEquals(fresh, provider.idToken())
             assertEquals(2, gateway.silentSignInCalls)
         }
+
+    private class MutableClock(
+        private var current: Instant,
+    ) : Clock() {
+        fun advance(duration: Duration) {
+            current += duration
+        }
+
+        override fun instant(): Instant = current
+
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId): Clock = this
+    }
 
     private class FakeSignInGateway(
         private val outcomes: MutableList<SignInOutcome>,

@@ -33,8 +33,11 @@ fun openMessageInGmail(
     context: Context,
     messageId: String,
 ) {
+    // The id comes from the server across a trust boundary; encoding makes it
+    // inert in the URL no matter what it contains.
+    val encodedId = Uri.encode(messageId)
     val intent =
-        Intent(Intent.ACTION_VIEW, Uri.parse("https://mail.google.com/mail/#all/$messageId"))
+        Intent(Intent.ACTION_VIEW, Uri.parse("https://mail.google.com/mail/#all/$encodedId"))
             .setPackage(GMAIL_PACKAGE)
     try {
         context.startActivity(intent)
