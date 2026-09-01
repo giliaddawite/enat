@@ -142,7 +142,14 @@ JWKS for signature/audience/expiry and rate-limited per user (TICKET-102).
 - **Digest API** (TICKET-105) — Cloud Scheduler → Pub/Sub triggers an
   idempotent generation job every morning, so `GET /v1/digest` serves a
   pre-built document in <300ms p95. ETag support lets the app skip unchanged
-  downloads.
+  downloads. Generation keys each document to the **UTC** calendar day, but
+  the read serves the **latest available** digest (newest date ≤ today UTC,
+  up to 7 days back as point reads — no index, no scan; the response's `date`
+  says which day it is). Strict-today reads left an evening gap: from ~8 PM ET
+  to midnight ET the new UTC date has no document yet, and the app showed
+  "no new mail" while the previous day's full digest sat in Firestore. 404
+  now means "no digest at all", and the app answers it with on-demand
+  `POST /v1/digest/generate` (which still generates for the current UTC day).
 - **Verse service** (TICKET-106) — `GET /v1/verse/today` from a curated
   rotation checked into the repo (`backend/src/data/verses.json`) and served
   from memory — a few hundred KB of static bilingual text needs no Firestore

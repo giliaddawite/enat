@@ -3,6 +3,7 @@ import type { Email } from './email.js';
 import {
   assembleDigest,
   computeDigestETag,
+  findLatestDigest,
   needsPersist,
   toDateKey,
   type Digest,
@@ -37,6 +38,88 @@ describe('toDateKey', () => {
   it('formats the UTC calendar date', () => {
     expect(toDateKey(new Date('2026-08-17T23:59:59.000Z'))).toBe('2026-08-17');
     expect(toDateKey(new Date('2026-08-17T00:00:00.000Z'))).toBe('2026-08-17');
+  });
+});
+
+describe('findLatestDigest', () => {
+  const NOON_UTC = new Date('2026-08-17T12:00:00.000Z');
+
+  function digestFor(date: string): Digest {
+    return {
+      date,
+      userId: 'uid-1',
+      sections: [],
+      generatedAt: `${date}T06:30:00.000Z`,
+      emailCount: 0,
+    };
+  }
+
+  function storeWith(...dates: string[]) {
+    const requested: string[] = [];
+    const getByDate = (date: string): Promise<Digest | null> => {
+      requested.push(date);
+      return Promise.resolve(dates.includes(date) ? digestFor(date) : null);
+    };
+    return { getByDate, requested };
+  }
+
+  it("returns today's digest with a single read when it exists", async () => {
+    const { getByDate, requested } = storeWith('2026-08-17', '2026-08-16');
+
+    const digest = await findLatestDigest(getByDate, NOON_UTC);
+
+    expect(digest?.date).toBe('2026-08-17');
+    expect(requested).toEqual(['2026-08-17']);
+  });
+
+  it("falls back to yesterday's digest in two reads when today's is absent", async () => {
+    const { getByDate, requested } = storeWith('2026-08-16');
+
+    const digest = await findLatestDigest(getByDate, NOON_UTC);
+
+    expect(digest?.date).toBe('2026-08-16');
+    expect(requested).toEqual(['2026-08-17', '2026-08-16']);
+  });
+
+  it('returns the newest digest within the lookback window', async () => {
+    const { getByDate } = storeWith('2026-08-12', '2026-08-14');
+
+    const digest = await findLatestDigest(getByDate, NOON_UTC);
+
+    expect(digest?.date).toBe('2026-08-14');
+  });
+
+  it('returns null after exactly seven daily reads when no digest exists', async () => {
+    const { getByDate, requested } = storeWith();
+
+    const digest = await findLatestDigest(getByDate, NOON_UTC);
+
+    expect(digest).toBeNull();
+    expect(requested).toEqual([
+      '2026-08-17',
+      '2026-08-16',
+      '2026-08-15',
+      '2026-08-14',
+      '2026-08-13',
+      '2026-08-12',
+      '2026-08-11',
+    ]);
+  });
+
+  it('treats a digest older than the lookback window as absent', async () => {
+    const { getByDate } = storeWith('2026-08-10');
+
+    const digest = await findLatestDigest(getByDate, NOON_UTC);
+
+    expect(digest).toBeNull();
+  });
+
+  it('walks UTC calendar days across a month boundary', async () => {
+    const { getByDate } = storeWith('2026-07-31');
+
+    const digest = await findLatestDigest(getByDate, new Date('2026-08-01T02:00:00.000Z'));
+
+    expect(digest?.date).toBe('2026-07-31');
   });
 });
 

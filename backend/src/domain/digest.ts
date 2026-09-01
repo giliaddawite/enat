@@ -39,13 +39,51 @@ export interface Digest {
   readonly emailCount: number;
 }
 
-/** UTC calendar day, used consistently for the digest document id, the generation job's
- * "today", and the read path's "today" lookup. A user-facing local-timezone digest boundary
- * is a reasonable follow-up once the service is multi-user, but out of scope for one
- * predominantly-US-Eastern mailbox: 6:30 AM ET generation always lands on the same UTC date
- * as ET's morning, so this never splits a day's mail across two documents. */
+/** UTC calendar day, used consistently for the digest document id and the generation job's
+ * "today". A user-facing local-timezone digest boundary is a reasonable follow-up once the
+ * service is multi-user, but out of scope for one predominantly-US-Eastern mailbox: 6:30 AM
+ * ET generation always lands on the same UTC date as ET's morning, so this never splits a
+ * day's mail across two documents. The read path deliberately does *not* pin itself to this
+ * key — see `findLatestDigest` for why. */
 export function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * How far back `findLatestDigest` looks before treating the user as having no digest.
+ * A digest older than this is stale enough that the right answer is the app's 404 fallback
+ * (`POST /v1/digest/generate`, which builds today's) rather than serving week-old mail —
+ * and the cap bounds the read path's worst case at this many point reads.
+ */
+export const LATEST_DIGEST_LOOKBACK_DAYS = 7;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The most recent digest with `date <= today` (UTC), or `null` if none exists within
+ * `LATEST_DIGEST_LOOKBACK_DAYS`. Exists because the day boundary is UTC while the user is
+ * in America/New_York: from ~8 PM ET to midnight ET a strict "today" lookup misses the full
+ * digest generated for the previous UTC date (observed live — "no new mail today" at
+ * 21:37 ET while a complete digest sat in Firestore).
+ *
+ * Deliberately a newest-first walk of point reads over an injected by-date getter, not a
+ * Firestore query: `DigestStore` only exposes point reads, and an ordered query would need
+ * a composite index plus adapter surface for one route. The common case (today's digest
+ * exists) stays one read, the evening gap costs two, and the capped worst case only occurs
+ * when the user has no recent digest — after which the app's on-demand generation restores
+ * the one-read path.
+ */
+export async function findLatestDigest(
+  getByDate: (date: string) => Promise<Digest | null>,
+  today: Date,
+): Promise<Digest | null> {
+  for (let daysBack = 0; daysBack < LATEST_DIGEST_LOOKBACK_DAYS; daysBack += 1) {
+    const digest = await getByDate(toDateKey(new Date(today.getTime() - daysBack * DAY_MS)));
+    if (digest !== null) {
+      return digest;
+    }
+  }
+  return null;
 }
 
 /**
@@ -118,7 +156,9 @@ function stableContent(digest: Digest): unknown {
  * byte-for-byte against the header value a client sends back.
  */
 export function computeDigestETag(digest: Digest): string {
-  const hash = createHash('sha256').update(JSON.stringify(stableContent(digest))).digest('hex');
+  const hash = createHash('sha256')
+    .update(JSON.stringify(stableContent(digest)))
+    .digest('hex');
   return `"${hash}"`;
 }
 
