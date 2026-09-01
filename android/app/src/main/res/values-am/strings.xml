@@ -18,9 +18,12 @@
     <string name="back_button">ተመለስ</string>
     <string name="dial_error">በዚህ መሣሪያ መደወል አይቻልም።</string>
 
-    <!-- የጥቅስ ቦታ ያዥ (TICKET-205 እስኪመጣ) -->
+    <!-- የዕለት ጥቅስ ገጽ (TICKET-205) -->
     <string name="verse_title">የዛሬ ጥቅስ</string>
-    <string name="verse_placeholder_body">የዕለቱ ጥቅስ በቅርቡ እዚህ ይመጣል።</string>
+    <string name="verse_loading">ጥቅሱ በመጫን ላይ ነው…</string>
+    <string name="verse_error_offline">የበይነመረብ ግንኙነት የለም። እባክዎ ግንኙነቱን ያረጋግጡ እና እንደገና ይሞክሩ።</string>
+    <string name="verse_error_generic">ጥቅሱን ማምጣት አልተቻለም። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="verse_retry_button">እንደገና ይሞክሩ</string>
 
     <!-- የቤተሰብ ደውል መምረጫ -->
     <string name="family_call_title">ቤተሰብ ደውል</string>

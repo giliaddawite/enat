@@ -9,7 +9,7 @@ import androidx.room.RoomDatabase
  * fixes the baseline schema, and migrations start from there.
  */
 @Database(
-    entities = [FamilyContactEntity::class, DigestEntity::class, DigestItemEntity::class],
+    entities = [FamilyContactEntity::class, DigestEntity::class, DigestItemEntity::class, VerseEntity::class],
     version = 1,
     exportSchema = false,
 )
@@ -17,4 +17,6 @@ abstract class EnatDatabase : RoomDatabase() {
     abstract fun familyContactDao(): FamilyContactDao
 
     abstract fun digestDao(): DigestDao
+
+    abstract fun verseDao(): VerseDao
 }

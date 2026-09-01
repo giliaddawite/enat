@@ -5,10 +5,13 @@ import androidx.room.Room
 import com.enat.app.data.db.DigestDao
 import com.enat.app.data.db.EnatDatabase
 import com.enat.app.data.db.FamilyContactDao
+import com.enat.app.data.db.VerseDao
 import com.enat.app.data.digest.DigestRepository
 import com.enat.app.data.digest.NetworkDigestRepository
 import com.enat.app.data.family.FamilyContactRepository
 import com.enat.app.data.family.RoomFamilyContactRepository
+import com.enat.app.data.verse.NetworkVerseRepository
+import com.enat.app.data.verse.VerseRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -26,6 +29,9 @@ abstract class DatabaseModule {
     @Binds
     abstract fun bindDigestRepository(impl: NetworkDigestRepository): DigestRepository
 
+    @Binds
+    abstract fun bindVerseRepository(impl: NetworkVerseRepository): VerseRepository
+
     companion object {
         @Provides
         @Singleton
@@ -38,5 +44,8 @@ abstract class DatabaseModule {
 
         @Provides
         fun provideDigestDao(database: EnatDatabase): DigestDao = database.digestDao()
+
+        @Provides
+        fun provideVerseDao(database: EnatDatabase): VerseDao = database.verseDao()
     }
 }

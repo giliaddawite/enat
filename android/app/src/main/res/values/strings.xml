@@ -19,9 +19,12 @@
     <string name="back_button">Back</string>
     <string name="dial_error">Calling is not possible on this device.</string>
 
-    <!-- Verse placeholder until TICKET-205 builds the real screen. -->
+    <!-- Daily verse screen (TICKET-205). -->
     <string name="verse_title">Today\'s verse</string>
-    <string name="verse_placeholder_body">The daily verse will arrive here soon.</string>
+    <string name="verse_loading">The verse is loading…</string>
+    <string name="verse_error_offline">No internet connection. Please check the connection and try again.</string>
+    <string name="verse_error_generic">The verse could not be loaded. Please try again.</string>
+    <string name="verse_retry_button">Try again</string>
 
     <!-- Family call picker (shown when more than one contact is configured). -->
     <string name="family_call_title">Call family</string>
