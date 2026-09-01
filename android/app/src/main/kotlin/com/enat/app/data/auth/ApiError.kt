@@ -34,6 +34,12 @@ object ApiErrorCode {
      * from the backend's "gmail_not_connected", which means consent never happened.
      */
     const val GMAIL_RECONNECT_REQUIRED = "gmail_reconnect_required"
+
+    /**
+     * Gmail consent never happened for this account (409 from POST
+     * /v1/digest/generate) — route back to first-run setup, not the reconnect card.
+     */
+    const val GMAIL_NOT_CONNECTED = "gmail_not_connected"
 }
 
 @Serializable

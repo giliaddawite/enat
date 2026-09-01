@@ -2,8 +2,11 @@ package com.enat.app.di
 
 import android.content.Context
 import androidx.room.Room
+import com.enat.app.data.db.DigestDao
 import com.enat.app.data.db.EnatDatabase
 import com.enat.app.data.db.FamilyContactDao
+import com.enat.app.data.digest.DigestRepository
+import com.enat.app.data.digest.NetworkDigestRepository
 import com.enat.app.data.family.FamilyContactRepository
 import com.enat.app.data.family.RoomFamilyContactRepository
 import dagger.Binds
@@ -20,6 +23,9 @@ abstract class DatabaseModule {
     @Binds
     abstract fun bindFamilyContactRepository(impl: RoomFamilyContactRepository): FamilyContactRepository
 
+    @Binds
+    abstract fun bindDigestRepository(impl: NetworkDigestRepository): DigestRepository
+
     companion object {
         @Provides
         @Singleton
@@ -29,5 +35,8 @@ abstract class DatabaseModule {
 
         @Provides
         fun provideFamilyContactDao(database: EnatDatabase): FamilyContactDao = database.familyContactDao()
+
+        @Provides
+        fun provideDigestDao(database: EnatDatabase): DigestDao = database.digestDao()
     }
 }
