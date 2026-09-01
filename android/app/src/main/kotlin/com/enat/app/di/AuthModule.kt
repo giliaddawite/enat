@@ -6,8 +6,10 @@ import com.enat.app.data.auth.GmailAuthorizationGateway
 import com.enat.app.data.auth.GmailConsentRepository
 import com.enat.app.data.auth.GoogleAuthConfig
 import com.enat.app.data.auth.GoogleSignInGateway
+import com.enat.app.data.auth.IdTokenProvider
 import com.enat.app.data.auth.NetworkGmailConsentRepository
 import com.enat.app.data.auth.PlayServicesGmailAuthorizationGateway
+import com.enat.app.data.auth.SessionIdTokenProvider
 import com.enat.app.data.setup.PreferencesSetupStateRepository
 import com.enat.app.data.setup.SetupStateRepository
 import dagger.Binds
@@ -32,6 +34,9 @@ abstract class AuthModule {
     @Binds
     @Singleton
     abstract fun bindSetupStateRepository(impl: PreferencesSetupStateRepository): SetupStateRepository
+
+    @Binds
+    abstract fun bindIdTokenProvider(impl: SessionIdTokenProvider): IdTokenProvider
 
     companion object {
         @Provides

@@ -7,9 +7,65 @@
     <string name="home_greeting_afternoon">እንደምን ዋሉ</string>
     <string name="home_greeting_evening">እንደምን አመሹ</string>
     <string name="home_loading">በመጫን ላይ ነው…</string>
-    <string name="home_error">ችግር ተፈጥሯል። እባክዎ እንደገና ይሞክሩ።</string>
-    <string name="home_refresh_button">አድስ</string>
-    <string name="home_retry_button">እንደገና ይሞክሩ</string>
+
+    <!-- ዋና ገጽ (TICKET-203) -->
+    <string name="hub_button_digest">የዛሬ መልእክቶች</string>
+    <string name="hub_button_verse">የዛሬ ጥቅስ</string>
+    <string name="hub_button_call">ቤተሰብ ደውል</string>
+    <string name="hub_call_not_configured">የቤተሰብ ስልክ ቁጥር ገና አልተዘጋጀም።</string>
+    <string name="hub_version">ስሪት %1$s</string>
+    <string name="hub_open_settings_action">የቤተሰብ ቁጥሮች ማስተካከያ ይክፈቱ</string>
+    <string name="back_button">ተመለስ</string>
+    <string name="dial_error">በዚህ መሣሪያ መደወል አይቻልም።</string>
+
+    <!-- የጥቅስ ቦታ ያዥ (TICKET-205 እስኪመጣ) -->
+    <string name="verse_title">የዛሬ ጥቅስ</string>
+    <string name="verse_placeholder_body">የዕለቱ ጥቅስ በቅርቡ እዚህ ይመጣል።</string>
+
+    <!-- የቤተሰብ ደውል መምረጫ -->
+    <string name="family_call_title">ቤተሰብ ደውል</string>
+    <string name="family_call_choose">ማን ጋር መደወል ይፈልጋሉ?</string>
+
+    <!-- የቤተሰብ ቁጥሮች ማስተካከያ (ለተንከባካቢው) -->
+    <string name="settings_title">የቤተሰብ ስልክ ቁጥሮች</string>
+    <string name="settings_intro">በዋናው ገጽ ያለው «ቤተሰብ ደውል» ቁልፍ እነዚህን ቁጥሮች ይደውላል።</string>
+    <string name="settings_empty">እስካሁን ምንም ቁጥር አልተጨመረም።</string>
+    <string name="settings_name_label">ስም</string>
+    <string name="settings_phone_label">ስልክ ቁጥር</string>
+    <string name="settings_add_button">ይጨምሩ</string>
+    <string name="settings_delete_description">%1$s አጥፋ</string>
+    <string name="settings_validation_error">ስም እና ትክክለኛ ስልክ ቁጥር ያስፈልጋሉ።</string>
+    <string name="settings_contact_added">ቁጥሩ ተጨምሯል።</string>
+    <string name="settings_contact_removed">ቁጥሩ ተወግዷል።</string>
+
+    <!-- የመልእክቶች ገጽ (TICKET-204) -->
+    <string name="digest_title">የዛሬ መልእክቶች</string>
+    <string name="digest_loading">መልእክቶች በመጫን ላይ ናቸው…</string>
+    <string name="digest_generating">የዛሬው ማጠቃለያ በመዘጋጀት ላይ ነው። ጥቂት ጊዜ ሊወስድ ይችላል…</string>
+    <string name="digest_refresh_button">ያድሱ</string>
+    <string name="digest_refreshing">በማደስ ላይ ነው…</string>
+    <string name="digest_refreshed">ማጠቃለያው ታድሷል።</string>
+    <string name="digest_retry_button">እንደገና ይሞክሩ</string>
+    <string name="digest_empty">ዛሬ አዲስ መልእክት የለም</string>
+    <string name="digest_error_offline">የበይነመረብ ግንኙነት የለም። እባክዎ ግንኙነቱን ያረጋግጡ እና እንደገና ይሞክሩ።</string>
+    <string name="digest_error_generic">መልእክቶቹን ማምጣት አልተቻለም። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="digest_notice_offline">የበይነመረብ ግንኙነት የለም። የተቀመጡት መልእክቶች እየታዩ ነው።</string>
+    <string name="digest_notice_refresh_failed">ማደስ አልተሳካም። የተቀመጡት መልእክቶች እየታዩ ነው።</string>
+    <string name="digest_urgent_badge">አስቸኳይ</string>
+    <string name="category_important">አስፈላጊ</string>
+    <string name="category_bills_accounts">ክፍያዎች እና መለያዎች</string>
+    <string name="category_family_personal">ቤተሰብ እና የግል</string>
+    <string name="category_promotions_other">ማስታወቂያዎች እና ሌሎች</string>
+
+    <!-- የመልእክት ዝርዝር ገጽ (TICKET-204) -->
+    <string name="detail_title">መልእክት</string>
+    <string name="detail_sender_label">ላኪ</string>
+    <string name="detail_subject_label">ርዕስ</string>
+    <string name="detail_category_label">ምድብ</string>
+    <string name="detail_no_summary">ለዚህ መልእክት ማጠቃለያ የለም።</string>
+    <string name="detail_open_gmail_button">በGmail ይክፈቱ</string>
+    <string name="detail_gmail_missing">Gmail በዚህ ስልክ ላይ አልተገኘም።</string>
+    <string name="detail_not_found">ይህ መልእክት አልተገኘም።</string>
 
     <!-- One-time setup flow (TICKET-202). -->
     <string name="setup_title">እናትን ያዋቅሩ</string>

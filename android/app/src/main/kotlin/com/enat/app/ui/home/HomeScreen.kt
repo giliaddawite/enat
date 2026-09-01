@@ -1,45 +1,80 @@
 package com.enat.app.ui.home
 
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.enat.app.BuildConfig
 import com.enat.app.R
 import com.enat.app.data.greeting.TimeOfDay
+import com.enat.app.ui.common.dialPhoneNumber
+import com.enat.app.ui.components.PrimaryActionButton
 
 /** Stateful entry point: owns the ViewModel, hoists state, forwards events. */
 @Composable
-fun HomeRoute(viewModel: HomeViewModel = hiltViewModel()) {
+fun HomeRoute(
+    onOpenDigest: () -> Unit,
+    onOpenVerse: () -> Unit,
+    onOpenFamilyPicker: () -> Unit,
+    onOpenSettings: () -> Unit,
+    viewModel: HomeViewModel = hiltViewModel(),
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    HomeScreen(uiState = uiState, onRefresh = viewModel::refresh)
+    val context = LocalContext.current
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is HomeEvent.DialFamily -> dialPhoneNumber(context, event.phoneNumber)
+                HomeEvent.OpenFamilyPicker -> onOpenFamilyPicker()
+            }
+        }
+    }
+    HomeScreen(
+        uiState = uiState,
+        onOpenDigest = onOpenDigest,
+        onOpenVerse = onOpenVerse,
+        onCallFamily = viewModel::onCallFamily,
+        onOpenSettings = onOpenSettings,
+    )
 }
 
 /** Stateless rendering of [HomeUiState] — all logic lives in [HomeViewModel]. */
 @Composable
 fun HomeScreen(
     uiState: HomeUiState,
-    onRefresh: () -> Unit,
+    onOpenDigest: () -> Unit,
+    onOpenVerse: () -> Unit,
+    onCallFamily: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -51,18 +86,17 @@ fun HomeScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
         ) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-            )
             when (uiState) {
                 HomeUiState.Loading -> LoadingContent()
-                is HomeUiState.Greeting -> GreetingContent(uiState.timeOfDay, onRefresh)
-                HomeUiState.Error -> ErrorContent(onRefresh)
+                is HomeUiState.Hub ->
+                    HubContent(
+                        state = uiState,
+                        onOpenDigest = onOpenDigest,
+                        onOpenVerse = onOpenVerse,
+                        onCallFamily = onCallFamily,
+                        onOpenSettings = onOpenSettings,
+                    )
             }
         }
     }
@@ -88,66 +122,116 @@ private fun LoadingContent() {
 }
 
 @Composable
-private fun GreetingContent(
-    timeOfDay: TimeOfDay,
-    onRefresh: () -> Unit,
+private fun HubContent(
+    state: HomeUiState.Hub,
+    onOpenDigest: () -> Unit,
+    onOpenVerse: () -> Unit,
+    onCallFamily: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val greetingRes =
-        when (timeOfDay) {
+        when (state.timeOfDay) {
             TimeOfDay.MORNING -> R.string.home_greeting_morning
             TimeOfDay.AFTERNOON -> R.string.home_greeting_afternoon
             TimeOfDay.EVENING -> R.string.home_greeting_evening
         }
     Text(
         text = stringResource(greetingRes),
+        style = MaterialTheme.typography.headlineMedium,
+        color = MaterialTheme.colorScheme.primary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.testTag("hub_greeting"),
+    )
+    Text(
+        text = state.dateText,
         style = MaterialTheme.typography.headlineLarge,
         textAlign = TextAlign.Center,
         modifier =
             Modifier
-                .padding(top = 24.dp)
-                .testTag("home_greeting"),
+                .padding(top = 8.dp)
+                .testTag("hub_date"),
     )
-    RefreshButton(
-        label = stringResource(R.string.home_refresh_button),
-        onClick = onRefresh,
+    Text(
+        text = state.timeText,
+        style = MaterialTheme.typography.displayMedium,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.testTag("hub_time"),
     )
+    Spacer(modifier = Modifier.height(24.dp))
+    // Focus order = column order: greeting, date/time, then the three actions —
+    // TalkBack walks them top to bottom. Each action is one tap from launch.
+    PrimaryActionButton(
+        label = stringResource(R.string.hub_button_digest),
+        onClick = onOpenDigest,
+        minHeight = HUB_BUTTON_MIN_HEIGHT,
+        textStyle = MaterialTheme.typography.headlineMedium,
+        modifier = Modifier.padding(top = 16.dp),
+    )
+    PrimaryActionButton(
+        label = stringResource(R.string.hub_button_verse),
+        onClick = onOpenVerse,
+        minHeight = HUB_BUTTON_MIN_HEIGHT,
+        textStyle = MaterialTheme.typography.headlineMedium,
+        modifier = Modifier.padding(top = 16.dp),
+    )
+    PrimaryActionButton(
+        label = stringResource(R.string.hub_button_call),
+        onClick = onCallFamily,
+        minHeight = HUB_BUTTON_MIN_HEIGHT,
+        textStyle = MaterialTheme.typography.headlineMedium,
+        modifier = Modifier.padding(top = 16.dp),
+    )
+    if (state.showCallNotConfigured) {
+        Text(
+            text = stringResource(R.string.hub_call_not_configured),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.error,
+            textAlign = TextAlign.Center,
+            modifier =
+                Modifier
+                    .padding(top = 16.dp)
+                    .testTag("hub_call_not_configured")
+                    // Appears in response to a tap; announce it without stealing focus.
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    }
+    Spacer(modifier = Modifier.height(32.dp))
+    VersionFooter(onOpenSettings = onOpenSettings)
 }
 
+/**
+ * Deliberate exception to the "no gesture-only interactions" rule: the long-press
+ * on the version text is the CAREGIVER'S hidden entry into quick-dial settings
+ * (TICKET-203), intentionally invisible to the end user so the hub stays three
+ * buttons and nothing else. Every END-USER action on this screen is a plain tap;
+ * once opened, the settings screen itself gets full accessibility treatment.
+ * TalkBack still exposes the long-press as a labeled custom action, so the entry
+ * is discoverable by an assistive-tech-using caregiver too.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ErrorContent(onRefresh: () -> Unit) {
+private fun VersionFooter(onOpenSettings: () -> Unit) {
     Text(
-        text = stringResource(R.string.home_error),
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.error,
+        text = stringResource(R.string.hub_version, BuildConfig.VERSION_NAME),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
         modifier =
             Modifier
-                .padding(top = 24.dp)
-                .testTag("home_error"),
-    )
-    RefreshButton(
-        label = stringResource(R.string.home_retry_button),
-        onClick = onRefresh,
+                .testTag("hub_version")
+                .heightIn(min = 64.dp)
+                // Both axes meet the 64dp floor even if the version string is short.
+                .widthIn(min = 64.dp)
+                .combinedClickable(
+                    // A stray single tap must do nothing — only the deliberate
+                    // long-press opens settings.
+                    onClick = {},
+                    onLongClick = onOpenSettings,
+                    onLongClickLabel = stringResource(R.string.hub_open_settings_action),
+                )
+                .padding(12.dp)
+                .wrapContentHeight(),
     )
 }
 
-// No contentDescription override: TalkBack reads the visible label itself, and a
-// duplicate description would drown it out (the redundant-description
-// anti-pattern). Text buttons only ever need their label.
-@Composable
-private fun RefreshButton(
-    label: String,
-    onClick: () -> Unit,
-) {
-    Button(
-        onClick = onClick,
-        modifier =
-            Modifier
-                .padding(top = 32.dp)
-                .fillMaxWidth()
-                // 64dp minimum touch target — deliberately above the 48dp guideline.
-                .heightIn(min = 64.dp),
-    ) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge)
-    }
-}
+private val HUB_BUTTON_MIN_HEIGHT = 96.dp

@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.enat.app.ui.home.HomeRoute
+import com.enat.app.ui.navigation.EnatNavHost
 import com.enat.app.ui.setup.SetupRoute
 import com.enat.app.ui.theme.EnatTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
                 if (showSetup) {
                     SetupRoute(onSetupFinished = viewModel::onSetupFinished)
                 } else {
-                    HomeRoute()
+                    EnatNavHost(onRestartSetup = viewModel::restartSetup)
                 }
             }
         }

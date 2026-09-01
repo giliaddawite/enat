@@ -274,6 +274,8 @@ class SetupViewModelTest {
             invocations++
             return outcome
         }
+
+        override suspend fun silentSignIn(): SignInOutcome = error("setup never mints silently")
     }
 
     private class FakeAuthorizationGateway(
