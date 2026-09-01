@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -65,19 +66,33 @@ fun FamilyCallScreen(
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            Text(
-                text = stringResource(R.string.family_call_choose),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(top = 16.dp),
-            )
-            contacts.forEach { contact ->
-                PrimaryActionButton(
-                    label = contact.name,
-                    onClick = { onCall(contact) },
-                    minHeight = 96.dp,
-                    textStyle = MaterialTheme.typography.headlineMedium,
+            if (contacts.isEmpty()) {
+                // Defensive: only reachable if the contacts were deleted while this
+                // screen was open — still a worded state, never a blank page.
+                Text(
+                    text = stringResource(R.string.hub_call_not_configured),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier =
+                        Modifier
+                            .padding(top = 16.dp)
+                            .testTag("family_call_empty"),
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.family_call_choose),
+                    style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(top = 16.dp),
                 )
+                contacts.forEach { contact ->
+                    PrimaryActionButton(
+                        label = contact.name,
+                        onClick = { onCall(contact) },
+                        minHeight = 96.dp,
+                        textStyle = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
             }
         }
     }

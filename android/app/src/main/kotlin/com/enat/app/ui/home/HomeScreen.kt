@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -84,13 +88,7 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             when (uiState) {
-                HomeUiState.Loading ->
-                    Text(
-                        text = stringResource(R.string.home_loading),
-                        style = MaterialTheme.typography.titleLarge,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 24.dp),
-                    )
+                HomeUiState.Loading -> LoadingContent()
                 is HomeUiState.Hub ->
                     HubContent(
                         state = uiState,
@@ -102,6 +100,25 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun LoadingContent() {
+    // A spinner never appears without words (Accessibility § CLAUDE.md).
+    Text(
+        text = stringResource(R.string.home_loading),
+        style = MaterialTheme.typography.titleLarge,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(top = 24.dp),
+    )
+    CircularProgressIndicator(
+        modifier =
+            Modifier
+                .padding(top = 24.dp)
+                .size(64.dp)
+                // The loading text above is the announcement; the spinner is decoration.
+                .clearAndSetSemantics { },
+    )
 }
 
 @Composable
@@ -203,6 +220,8 @@ private fun VersionFooter(onOpenSettings: () -> Unit) {
             Modifier
                 .testTag("hub_version")
                 .heightIn(min = 64.dp)
+                // Both axes meet the 64dp floor even if the version string is short.
+                .widthIn(min = 64.dp)
                 .combinedClickable(
                     // A stray single tap must do nothing — only the deliberate
                     // long-press opens settings.

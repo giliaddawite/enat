@@ -143,6 +143,25 @@ fun FamilySettingsScreen(
                         .heightIn(min = 64.dp)
                         .testTag("settings_phone_input"),
             )
+            if (uiState.confirmation != null) {
+                val confirmationRes =
+                    when (uiState.confirmation) {
+                        ContactChange.ADDED -> R.string.settings_contact_added
+                        ContactChange.REMOVED -> R.string.settings_contact_removed
+                    }
+                Text(
+                    text = stringResource(confirmationRes),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier =
+                        Modifier
+                            .padding(top = 16.dp)
+                            .testTag("settings_confirmation")
+                            // Success is announced as audibly as the validation
+                            // error below — silence after a tap reads as failure.
+                            .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
             if (uiState.showValidationError) {
                 Text(
                     text = stringResource(R.string.settings_validation_error),

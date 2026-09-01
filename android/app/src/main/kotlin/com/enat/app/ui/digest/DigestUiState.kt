@@ -42,8 +42,12 @@ sealed interface DigestUiState {
     data object ReconnectRequired : DigestUiState
 }
 
-/** Inline notice above content that is still readable (the cache carried the screen). */
-enum class DigestNotice { OFFLINE, REFRESH_FAILED }
+/**
+ * Inline notice above content. OFFLINE/REFRESH_FAILED say why the cache is what's
+ * showing; REFRESHED confirms a user-initiated refresh succeeded — success must be
+ * announced just as loudly as failure (TalkBack hears the polite live region).
+ */
+enum class DigestNotice { OFFLINE, REFRESH_FAILED, REFRESHED }
 
 enum class DigestErrorKind { OFFLINE, GENERIC }
 

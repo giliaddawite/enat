@@ -13,11 +13,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Which change just succeeded — success is confirmed as audibly as failure. */
+enum class ContactChange { ADDED, REMOVED }
+
 data class FamilySettingsUiState(
     val contacts: List<FamilyContact> = emptyList(),
     val nameInput: String = "",
     val phoneInput: String = "",
     val showValidationError: Boolean = false,
+    val confirmation: ContactChange? = null,
 )
 
 /**
@@ -34,6 +38,7 @@ class FamilySettingsViewModel
             val name: String = "",
             val phone: String = "",
             val showValidationError: Boolean = false,
+            val confirmation: ContactChange? = null,
         )
 
         private val form = MutableStateFlow(FormState())
@@ -45,6 +50,7 @@ class FamilySettingsViewModel
                     nameInput = formState.name,
                     phoneInput = formState.phone,
                     showValidationError = formState.showValidationError,
+                    confirmation = formState.confirmation,
                 )
             }.stateIn(
                 viewModelScope,
@@ -53,28 +59,33 @@ class FamilySettingsViewModel
             )
 
         fun onNameChanged(name: String) {
-            form.value = form.value.copy(name = name, showValidationError = false)
+            form.value = form.value.copy(name = name, showValidationError = false, confirmation = null)
         }
 
         fun onPhoneChanged(phone: String) {
-            form.value = form.value.copy(phone = phone, showValidationError = false)
+            form.value = form.value.copy(phone = phone, showValidationError = false, confirmation = null)
         }
 
         fun addContact() {
             val name = form.value.name.trim()
             val phone = form.value.phone.trim()
             if (name.isEmpty() || !isDialable(phone)) {
-                form.value = form.value.copy(showValidationError = true)
+                form.value = form.value.copy(showValidationError = true, confirmation = null)
                 return
             }
             viewModelScope.launch {
                 familyContactRepository.add(name, phone)
-                form.value = FormState()
+                // A cleared form alone reads as ambiguous; the confirmation says
+                // the add worked (and TalkBack announces it).
+                form.value = FormState(confirmation = ContactChange.ADDED)
             }
         }
 
         fun removeContact(id: Long) {
-            viewModelScope.launch { familyContactRepository.remove(id) }
+            viewModelScope.launch {
+                familyContactRepository.remove(id)
+                form.value = form.value.copy(confirmation = ContactChange.REMOVED)
+            }
         }
 
         /** Just enough validation for ACTION_DIAL: at least one digit, dialer characters only. */

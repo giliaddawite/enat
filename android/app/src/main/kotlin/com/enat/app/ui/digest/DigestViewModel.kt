@@ -71,11 +71,15 @@ class DigestViewModel
             cached: Digest?,
             userInitiated: Boolean,
         ) {
+            // A refresh the user asked for confirms its success out loud — silence
+            // after a tap reads as failure, on screen and in TalkBack alike.
+            val successNotice = if (userInitiated) DigestNotice.REFRESHED else null
             when (result) {
-                is DigestSyncResult.Success -> _uiState.value = stateFor(result.digest, refreshing = false)
+                is DigestSyncResult.Success ->
+                    _uiState.value = stateFor(result.digest, refreshing = false, notice = successNotice)
                 DigestSyncResult.NotModified ->
                     // A 304 can only follow an If-None-Match, which only a cache provides.
-                    cached?.let { _uiState.value = stateFor(it, refreshing = false) }
+                    cached?.let { _uiState.value = stateFor(it, refreshing = false, notice = successNotice) }
                 DigestSyncResult.NoDigestYet -> onNoDigestYet(cached)
                 DigestSyncResult.GmailReconnectRequired -> _uiState.value = DigestUiState.ReconnectRequired
                 DigestSyncResult.GmailNotConnected, DigestSyncResult.SignedOut -> {

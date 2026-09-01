@@ -36,6 +36,8 @@
     <string name="settings_add_button">Add</string>
     <string name="settings_delete_description">Delete %1$s</string>
     <string name="settings_validation_error">A name and a valid phone number are required.</string>
+    <string name="settings_contact_added">The number has been added.</string>
+    <string name="settings_contact_removed">The number has been removed.</string>
 
     <!-- Digest screen (TICKET-204). -->
     <string name="digest_title">Today\'s mail</string>
@@ -43,6 +45,7 @@
     <string name="digest_generating">Today\'s summary is being prepared. This can take a moment…</string>
     <string name="digest_refresh_button">Refresh</string>
     <string name="digest_refreshing">Updating…</string>
+    <string name="digest_refreshed">The summary has been updated.</string>
     <string name="digest_retry_button">Try again</string>
     <string name="digest_empty">No new mail today</string>
     <string name="digest_error_offline">No internet connection. Please check the connection and try again.</string>

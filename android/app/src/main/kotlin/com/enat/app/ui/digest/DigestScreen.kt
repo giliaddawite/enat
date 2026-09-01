@@ -230,15 +230,25 @@ private fun RefreshHeader(
             when (notice) {
                 DigestNotice.OFFLINE -> R.string.digest_notice_offline
                 DigestNotice.REFRESH_FAILED -> R.string.digest_notice_refresh_failed
+                DigestNotice.REFRESHED -> R.string.digest_refreshed
             }
         Text(
             text = stringResource(noticeRes),
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.error,
+            // Success in the calm primary green, problems in error red — and the
+            // text itself carries the meaning either way, never the color alone.
+            color =
+                if (notice == DigestNotice.REFRESHED) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
             modifier =
                 Modifier
                     .padding(top = 8.dp)
                     .testTag("digest_notice")
+                    // Mirrors SetupScreen's SuccessContent: outcome announcements
+                    // are polite live regions, success and failure alike.
                     .semantics { liveRegion = LiveRegionMode.Polite },
         )
     }
@@ -331,7 +341,10 @@ private fun EmptyContent(
                 Modifier
                     .fillMaxWidth()
                     .padding(top = 48.dp)
-                    .testTag("digest_empty"),
+                    .testTag("digest_empty")
+                    // The empty answer often replaces a loading state — TalkBack
+                    // must hear that the wait ended in "no new mail today".
+                    .semantics { liveRegion = LiveRegionMode.Polite },
         )
     }
 }

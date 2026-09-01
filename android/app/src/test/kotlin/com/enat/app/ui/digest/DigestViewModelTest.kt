@@ -162,9 +162,48 @@ class DigestViewModelTest {
 
                 viewModel.refresh()
                 assertEquals(DigestUiState.Content(sampleDigest, refreshing = true), awaitItem())
-                assertEquals(DigestUiState.Content(fresh, refreshing = false), awaitItem())
+                // A user-initiated refresh confirms its success out loud.
+                assertEquals(
+                    DigestUiState.Content(fresh, refreshing = false, notice = DigestNotice.REFRESHED),
+                    awaitItem(),
+                )
             }
             assertEquals(1, repository.regenerateCalls)
+        }
+
+    @Test
+    fun `a refresh that finds nothing new still confirms success`() =
+        runTest {
+            repository.cached = sampleDigest
+            repository.fetchResults += DigestSyncResult.NotModified
+            repository.regenerateResults += DigestSyncResult.NotModified
+            val viewModel = DigestViewModel(repository)
+
+            viewModel.uiState.test {
+                awaitItem()
+                awaitItem()
+                awaitItem()
+
+                viewModel.refresh()
+                awaitItem() // refreshing = true
+                assertEquals(
+                    DigestUiState.Content(sampleDigest, refreshing = false, notice = DigestNotice.REFRESHED),
+                    awaitItem(),
+                )
+            }
+        }
+
+    @Test
+    fun `the initial background revalidation stays silent on success`() =
+        runTest {
+            repository.fetchResults += DigestSyncResult.Success(sampleDigest)
+            val viewModel = DigestViewModel(repository)
+
+            viewModel.uiState.test {
+                awaitItem()
+                // Not user-initiated — no "refreshed" chatter on plain screen opens.
+                assertEquals(DigestUiState.Content(sampleDigest, refreshing = false, notice = null), awaitItem())
+            }
         }
 
     @Test

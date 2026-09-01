@@ -51,6 +51,19 @@ class FamilyCallScreenTest {
     }
 
     @Test
+    fun emptyContacts_showsAWordedStateInsteadOfABlankPage() {
+        composeTestRule.setContent {
+            EnatTheme {
+                FamilyCallScreen(contacts = emptyList(), onCall = {}, onBack = {})
+            }
+        }
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.hub_call_not_configured))
+            .assertIsDisplayed()
+    }
+
+    @Test
     fun tappingAContact_emitsCallWithThatContact() {
         var called: FamilyContact? = null
         composeTestRule.setContent {

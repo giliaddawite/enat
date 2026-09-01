@@ -32,16 +32,19 @@
     <string name="settings_empty">እስካሁን ምንም ቁጥር አልተጨመረም።</string>
     <string name="settings_name_label">ስም</string>
     <string name="settings_phone_label">ስልክ ቁጥር</string>
-    <string name="settings_add_button">ጨምር</string>
+    <string name="settings_add_button">ይጨምሩ</string>
     <string name="settings_delete_description">%1$s አጥፋ</string>
     <string name="settings_validation_error">ስም እና ትክክለኛ ስልክ ቁጥር ያስፈልጋሉ።</string>
+    <string name="settings_contact_added">ቁጥሩ ተጨምሯል።</string>
+    <string name="settings_contact_removed">ቁጥሩ ተወግዷል።</string>
 
     <!-- የመልእክቶች ገጽ (TICKET-204) -->
     <string name="digest_title">የዛሬ መልእክቶች</string>
     <string name="digest_loading">መልእክቶች በመጫን ላይ ናቸው…</string>
     <string name="digest_generating">የዛሬው ማጠቃለያ በመዘጋጀት ላይ ነው። ጥቂት ጊዜ ሊወስድ ይችላል…</string>
-    <string name="digest_refresh_button">አድስ</string>
+    <string name="digest_refresh_button">ያድሱ</string>
     <string name="digest_refreshing">በማደስ ላይ ነው…</string>
+    <string name="digest_refreshed">ማጠቃለያው ታድሷል።</string>
     <string name="digest_retry_button">እንደገና ይሞክሩ</string>
     <string name="digest_empty">ዛሬ አዲስ መልእክት የለም</string>
     <string name="digest_error_offline">የበይነመረብ ግንኙነት የለም። እባክዎ ግንኙነቱን ያረጋግጡ እና እንደገና ይሞክሩ።</string>

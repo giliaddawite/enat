@@ -50,6 +50,8 @@ class FamilySettingsViewModelTest {
                 val added = awaitItem()
                 assertEquals("", added.nameInput)
                 assertEquals("", added.phoneInput)
+                // Success is confirmed explicitly — a cleared form alone is ambiguous.
+                assertEquals(ContactChange.ADDED, added.confirmation)
                 assertEquals(listOf("ሳራ" to "+1 555 987-6543"), repository.added)
             }
         }
@@ -104,16 +106,34 @@ class FamilySettingsViewModelTest {
         }
 
     @Test
-    fun `remove delegates to the repository`() =
+    fun `remove delegates to the repository and confirms it`() =
         runTest {
             val viewModel = FamilySettingsViewModel(repository)
+            viewModel.uiState.test {
+                awaitItem()
 
-            viewModel.removeContact(7)
-            advanceUntilIdle()
+                viewModel.removeContact(7)
+                advanceUntilIdle()
 
-            // The repository call is the observable behavior; state only changes
-            // once the (fake) contacts flow does.
+                assertEquals(ContactChange.REMOVED, awaitItem().confirmation)
+            }
             assertEquals(listOf(7L), repository.removed)
+        }
+
+    @Test
+    fun `typing again clears the confirmation`() =
+        runTest {
+            val viewModel = FamilySettingsViewModel(repository)
+            viewModel.uiState.test {
+                awaitItem()
+
+                viewModel.removeContact(7)
+                advanceUntilIdle()
+                awaitItem() // confirmation shown
+
+                viewModel.onNameChanged("ሙ")
+                assertEquals(null, awaitItem().confirmation)
+            }
         }
 
     private class FakeFamilyContactRepository : FamilyContactRepository {

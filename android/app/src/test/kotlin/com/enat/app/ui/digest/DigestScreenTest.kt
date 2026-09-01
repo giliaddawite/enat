@@ -3,6 +3,10 @@ package com.enat.app.ui.digest
 import android.app.Application
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -166,6 +170,35 @@ class DigestScreenTest {
             .onNodeWithText(context.getString(R.string.digest_notice_offline))
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("Bank").assertIsDisplayed()
+    }
+
+    @Test
+    fun refreshSuccess_isAnnouncedAsAPoliteLiveRegion() {
+        setScreen(DigestUiState.Content(digest, refreshing = false, notice = DigestNotice.REFRESHED))
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.digest_refreshed))
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
+    }
+
+    @Test
+    fun emptyState_isAPoliteLiveRegionSoTalkBackHearsTheAnswer() {
+        setScreen(DigestUiState.Empty())
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.digest_empty))
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
     }
 
     @Test

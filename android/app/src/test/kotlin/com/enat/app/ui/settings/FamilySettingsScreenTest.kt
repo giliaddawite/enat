@@ -3,6 +3,10 @@ package com.enat.app.ui.settings
 import android.app.Application
 import android.content.Context
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -79,6 +83,21 @@ class FamilySettingsScreenTest {
         deleteButton.performClick()
 
         assertEquals(5L, removedId)
+    }
+
+    @Test
+    fun confirmation_isVisibleAndAPoliteLiveRegion() {
+        setScreen(FamilySettingsUiState(confirmation = ContactChange.ADDED))
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.settings_contact_added))
+            .assertIsDisplayed()
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.LiveRegion,
+                    LiveRegionMode.Polite,
+                ),
+            )
     }
 
     @Test
