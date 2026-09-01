@@ -148,6 +148,37 @@ class NetworkDigestRepositoryTest {
         }
 
     @Test
+    fun `a hostile ETag is dropped instead of poisoning revalidation`() =
+        runTest {
+            // Outside printable ASCII: replaying it as If-None-Match would make
+            // OkHttp throw IllegalArgumentException on every later load — and a
+            // persisted value makes that crash sticky. addHeaderLenient bypasses
+            // MockWebServer's own validation, like a hostile server would.
+            server.enqueue(
+                MockResponse().setResponseCode(200).addHeaderLenient("ETag", "\"v1é\"").setBody(digestJson),
+            )
+            val first = repository.fetchLatest()
+            assertTrue(first is DigestSyncResult.Success)
+            server.takeRequest()
+
+            server.enqueue(MockResponse().setResponseCode(200).setHeader("ETag", "\"v2\"").setBody(digestJson))
+            val second = repository.fetchLatest()
+
+            // No crash, and the poisoned value was never persisted: the
+            // revalidation simply went out unconditional.
+            assertTrue(second is DigestSyncResult.Success)
+            assertNull(server.takeRequest().getHeader("If-None-Match"))
+        }
+
+    @Test
+    fun `a malformed body maps to Failed instead of crashing`() =
+        runTest {
+            server.enqueue(MockResponse().setResponseCode(200).setBody("not json at all"))
+
+            assertEquals(DigestSyncResult.Failed, repository.fetchLatest())
+        }
+
+    @Test
     fun `404 maps to NoDigestYet`() =
         runTest {
             server.enqueue(errorResponse(404, "digest_not_found"))

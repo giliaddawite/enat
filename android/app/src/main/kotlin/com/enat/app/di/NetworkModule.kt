@@ -4,6 +4,7 @@ import com.enat.app.BuildConfig
 import com.enat.app.data.auth.AuthApi
 import com.enat.app.data.auth.AuthInterceptor
 import com.enat.app.data.digest.DigestApi
+import com.enat.app.data.verse.VerseApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -59,4 +60,8 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideDigestApi(retrofit: Retrofit): DigestApi = retrofit.create(DigestApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideVerseApi(retrofit: Retrofit): VerseApi = retrofit.create(VerseApi::class.java)
 }

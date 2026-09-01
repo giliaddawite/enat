@@ -18,9 +18,18 @@
     <string name="back_button">ተመለስ</string>
     <string name="dial_error">በዚህ መሣሪያ መደወል አይቻልም።</string>
 
-    <!-- የጥቅስ ቦታ ያዥ (TICKET-205 እስኪመጣ) -->
+    <!-- የዕለት ጥቅስ ገጽ (TICKET-205) -->
     <string name="verse_title">የዛሬ ጥቅስ</string>
-    <string name="verse_placeholder_body">የዕለቱ ጥቅስ በቅርቡ እዚህ ይመጣል።</string>
+    <string name="verse_loading">ጥቅሱ በመጫን ላይ ነው…</string>
+    <string name="verse_error_offline">የበይነመረብ ግንኙነት የለም። እባክዎ ግንኙነቱን ያረጋግጡ እና እንደገና ይሞክሩ።</string>
+    <string name="verse_error_generic">ጥቅሱን ማምጣት አልተቻለም። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="verse_retry_button">እንደገና ይሞክሩ</string>
+
+    <!-- የዕለት ጥቅስ ማሳወቂያ (TICKET-205) -->
+    <string name="notification_channel_name">የዕለት ጥቅስ</string>
+    <string name="notification_channel_description">የዕለቱ ጥቅስ ዝግጁ መሆኑን የሚያሳውቅ የጠዋት ማስታወሻ።</string>
+    <string name="notification_verse_title">የዛሬ ጥቅስ</string>
+    <string name="notification_verse_body">የዕለቱ ጥቅስ ዝግጁ ነው። ለማንበብ ይጫኑ።</string>
 
     <!-- የቤተሰብ ደውል መምረጫ -->
     <string name="family_call_title">ቤተሰብ ደውል</string>
@@ -72,8 +81,9 @@
     <string name="setup_step_sign_in">1. በGoogle ይግቡ</string>
     <string name="setup_step_gmail">2. የGmail ፈቃድ ይስጡ</string>
     <string name="setup_step_connect">3. ከአገልጋዩ ጋር ይገናኙ</string>
+    <string name="setup_step_notifications">4. ማሳወቂያ ይፍቀዱ</string>
     <string name="setup_step_current">የአሁኑ ደረጃ</string>
-    <string name="setup_intro">ይህን ስልክ ከGmail ጋር ለማገናኘት ሦስት ደረጃዎች አሉ። ለመጀመር ቁልፉን ይጫኑ።</string>
+    <string name="setup_intro">ይህን ስልክ ከGmail ጋር ለማገናኘት ጥቂት ደረጃዎች አሉ። ለመጀመር ቁልፉን ይጫኑ።</string>
     <string name="setup_sign_in_button">በGoogle ይግቡ</string>
     <string name="setup_status_signing_in">በመግባት ላይ ነው…</string>
     <string name="setup_status_authorizing">የGmail ፈቃድ በመጠበቅ ላይ ነው…</string>
@@ -81,6 +91,8 @@
     <string name="setup_success_title">ተጠናቋል!</string>
     <string name="setup_success_body">Gmail ተገናኝቷል። መተግበሪያው ለአገልግሎት ዝግጁ ነው።</string>
     <string name="setup_done_button">ይጀምሩ</string>
+    <string name="setup_notifications_intro">በየጠዋቱ የዕለቱ ጥቅስ ማስታወሻ ይታያል። በሚቀጥለው ማያ ገጽ ማሳወቂያውን ይፍቀዱ።</string>
+    <string name="setup_notifications_allow_button">ይቀጥሉ</string>
     <string name="setup_retry_button">እንደገና ይሞክሩ</string>
     <string name="setup_error_sign_in">መግባት አልተጠናቀቀም። እባክዎ እንደገና ይሞክሩ።</string>
     <string name="setup_error_authorization">የGmail ፈቃድ አልተጠናቀቀም። እባክዎ እንደገና ይሞክሩ።</string>

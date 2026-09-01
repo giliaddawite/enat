@@ -37,6 +37,7 @@ class SetupScreenTest {
         uiState: SetupUiState,
         onSignIn: () -> Unit = {},
         onRetry: () -> Unit = {},
+        onAllowNotifications: () -> Unit = {},
         onDone: () -> Unit = {},
     ) {
         composeTestRule.setContent {
@@ -45,6 +46,7 @@ class SetupScreenTest {
                     uiState = uiState,
                     onSignIn = onSignIn,
                     onRetry = onRetry,
+                    onAllowNotifications = onAllowNotifications,
                     onDone = onDone,
                 )
             }
@@ -141,6 +143,36 @@ class SetupScreenTest {
         composeTestRule
             .onNodeWithText(context.getString(R.string.setup_status_connecting))
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun notificationStep_explainsTheReminderAndAllowEmitsEvent() {
+        var allowRequested = false
+        setScreen(SetupUiState.NotificationPermissionStep, onAllowNotifications = { allowRequested = true })
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.setup_notifications_intro))
+            .assertIsDisplayed()
+        val button =
+            composeTestRule.onNodeWithText(context.getString(R.string.setup_notifications_allow_button))
+        button.assertHeightIsAtLeast(64.dp)
+        button.performClick()
+
+        assertTrue(allowRequested)
+    }
+
+    @Test
+    fun notificationStep_marksTheNotificationStepAsCurrentForTalkBack() {
+        setScreen(SetupUiState.NotificationPermissionStep)
+
+        composeTestRule
+            .onNodeWithText(context.getString(R.string.setup_step_notifications))
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.StateDescription,
+                    context.getString(R.string.setup_step_current),
+                ),
+            )
     }
 
     @Test

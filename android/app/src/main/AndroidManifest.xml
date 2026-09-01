@@ -2,6 +2,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ runtime permission for the daily verse reminder (TICKET-205).
+         Asked at most once, as the setup flow's final step — a persisted flag
+         (SetupStateRepository) keeps restarted setups from re-asking, so a denial
+         is respected for good: the app never nags and works fully without
+         notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Package-visibility declaration (Android 11+): without it, the digest
          detail's package-pinned Gmail intent throws ActivityNotFoundException

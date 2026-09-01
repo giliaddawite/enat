@@ -6,6 +6,7 @@ import com.enat.app.data.auth.apiErrorCode
 import com.enat.app.data.db.DigestDao
 import com.enat.app.data.db.DigestEntity
 import com.enat.app.data.db.DigestItemEntity
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import retrofit2.Response
 import java.io.IOException
@@ -98,11 +99,15 @@ class NetworkDigestRepository
                 } catch (unreachable: IOException) {
                     // Offline or the server is down — the cache carries the screen.
                     return DigestSyncResult.Offline
+                } catch (malformed: SerializationException) {
+                    // A body that isn't the contract is a server problem, not a
+                    // crash: same retryable answer as any other bad response.
+                    return DigestSyncResult.Failed
                 }
             val body = response.body()
             if (response.isSuccessful && body != null) {
                 val digest = body.toDomain()
-                persist(digest, etag = response.headers()["ETag"])
+                persist(digest, etag = headerSafe(response.headers()["ETag"]))
                 return DigestSyncResult.Success(digest)
             }
             return when (response.code()) {
@@ -150,6 +155,15 @@ class NetworkDigestRepository
                 items,
             )
         }
+
+        /**
+         * OkHttp refuses request-header values outside printable ASCII with an
+         * IllegalArgumentException — which no IOException catch sees, and which a
+         * persisted hostile ETag would rethrow on every later revalidation: a
+         * sticky crash. Validate before persisting; a dropped ETag only makes the
+         * next request unconditional.
+         */
+        private fun headerSafe(etag: String?): String? = etag?.takeIf { value -> value.all { it in ' '..'~' } }
 
         private fun DigestItemEntity.toDomain(): DigestItem =
             DigestItem(

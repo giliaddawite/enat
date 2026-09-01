@@ -12,6 +12,8 @@ import com.enat.app.data.auth.GoogleAuthConfig
 import com.enat.app.data.auth.GoogleSignInGateway
 import com.enat.app.data.auth.SignInOutcome
 import com.enat.app.data.setup.SetupStateRepository
+import com.enat.app.notifications.NotificationPermissionGateway
+import com.enat.app.notifications.VerseReminderScheduler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -39,6 +41,10 @@ class SetupViewModelTest {
     private val consentRepository = FakeConsentRepository(ConsentSubmissionResult.Accepted)
     private val setupStateRepository = FakeSetupStateRepository()
 
+    // Most tests run as on a pre-13 device (or one already granted): no extra step.
+    private val notificationPermissionGateway = FakeNotificationPermissionGateway(permissionUndecided = false)
+    private val verseReminderScheduler = FakeVerseReminderScheduler()
+
     private fun viewModel(configured: Boolean = true) =
         SetupViewModel(
             config =
@@ -49,6 +55,8 @@ class SetupViewModelTest {
             authorizationGateway = authorizationGateway,
             consentRepository = consentRepository,
             setupStateRepository = setupStateRepository,
+            notificationPermissionGateway = notificationPermissionGateway,
+            verseReminderScheduler = verseReminderScheduler,
         )
 
     /** Collects every distinct state, including intermediates, for whole-machine assertions. */
@@ -265,6 +273,113 @@ class SetupViewModelTest {
             assertTrue(setupStateRepository.complete)
         }
 
+    @Test
+    fun `completing setup schedules the daily reminder right after consent`() =
+        runTest {
+            val viewModel = viewModel()
+
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            assertEquals(SetupUiState.Success, viewModel.uiState.value)
+            // The first schedule anchors here, at the moment consent lands —
+            // not on some later app start.
+            assertEquals(1, verseReminderScheduler.invocations)
+        }
+
+    @Test
+    fun `a failed setup schedules nothing`() =
+        runTest {
+            consentRepository.result = ConsentSubmissionResult.Failed
+            val viewModel = viewModel()
+
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            assertEquals(0, verseReminderScheduler.invocations)
+        }
+
+    @Test
+    fun `an undecided notification permission adds the permission step before success`() =
+        runTest {
+            notificationPermissionGateway.permissionUndecided = true
+            val viewModel = viewModel()
+
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            assertEquals(SetupUiState.NotificationPermissionStep, viewModel.uiState.value)
+            // Setup is already complete — the notification ask is a bonus, not a gate.
+            assertTrue(setupStateRepository.complete)
+        }
+
+    @Test
+    fun `a granted permission dialog finishes setup`() =
+        runTest {
+            notificationPermissionGateway.permissionUndecided = true
+            val viewModel = viewModel()
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            viewModel.onNotificationPermissionResult()
+
+            assertEquals(SetupUiState.Success, viewModel.uiState.value)
+        }
+
+    @Test
+    fun `a denied permission dialog still finishes setup - no nagging`() =
+        runTest {
+            notificationPermissionGateway.permissionUndecided = true
+            val viewModel = viewModel()
+            viewModel.startSignIn(activity)
+            advanceUntilIdle()
+
+            // The route reports the dialog's answer the same way for grant and
+            // denial; either way setup ends at Success and never re-asks.
+            viewModel.onNotificationPermissionResult()
+
+            assertEquals(SetupUiState.Success, viewModel.uiState.value)
+            assertTrue(setupStateRepository.complete)
+        }
+
+    @Test
+    fun `a restarted setup after a denial never re-asks for the permission`() =
+        runTest {
+            // First run: the installer reaches the permission step and the system
+            // dialog is answered (denied — the answer itself does not matter).
+            notificationPermissionGateway.permissionUndecided = true
+            val firstRun = viewModel()
+            firstRun.startSignIn(activity)
+            advanceUntilIdle()
+            assertEquals(SetupUiState.NotificationPermissionStep, firstRun.uiState.value)
+            firstRun.onNotificationPermissionResult()
+
+            // Setup restarts (e.g. the reconnect path). The permission is still
+            // undecided as far as Android reports (denied != granted), but the
+            // persisted asked-flag must keep the promise: asked at most once.
+            val secondRun = viewModel()
+            secondRun.startSignIn(activity)
+            advanceUntilIdle()
+
+            assertEquals(SetupUiState.Success, secondRun.uiState.value)
+        }
+
+    @Test
+    fun `a stray permission result outside the permission step changes nothing`() =
+        runTest {
+            val viewModel = viewModel()
+
+            viewModel.onNotificationPermissionResult()
+
+            assertEquals(SetupUiState.SignInStep, viewModel.uiState.value)
+        }
+
+    private class FakeNotificationPermissionGateway(
+        var permissionUndecided: Boolean,
+    ) : NotificationPermissionGateway {
+        override fun needsRequest(): Boolean = permissionUndecided
+    }
+
     private class FakeSignInGateway(
         var outcome: SignInOutcome,
     ) : GoogleSignInGateway {
@@ -311,11 +426,26 @@ class SetupViewModelTest {
 
     private class FakeSetupStateRepository : SetupStateRepository {
         var complete = false
+        var notificationPermissionRequested = false
 
         override fun isSetupComplete(): Boolean = complete
 
         override fun markSetupComplete() {
             complete = true
+        }
+
+        override fun isNotificationPermissionRequested(): Boolean = notificationPermissionRequested
+
+        override fun markNotificationPermissionRequested() {
+            notificationPermissionRequested = true
+        }
+    }
+
+    private class FakeVerseReminderScheduler : VerseReminderScheduler {
+        var invocations = 0
+
+        override fun scheduleDailyReminder() {
+            invocations++
         }
     }
 

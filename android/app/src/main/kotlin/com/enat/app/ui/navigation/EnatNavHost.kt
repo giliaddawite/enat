@@ -1,6 +1,11 @@
 package com.enat.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -13,7 +18,7 @@ import com.enat.app.ui.digest.DigestRoute
 import com.enat.app.ui.family.FamilyCallRoute
 import com.enat.app.ui.home.HomeRoute
 import com.enat.app.ui.settings.FamilySettingsRoute
-import com.enat.app.ui.verse.VersePlaceholderScreen
+import com.enat.app.ui.verse.VerseRoute
 
 /** Route names — the single place screen destinations are spelled. */
 object EnatRoutes {
@@ -41,10 +46,25 @@ object EnatRoutes {
  * (unlike a bare popBackStack) refuses to pop the last entry, so even a tap that
  * slips past the lifecycle gate cannot pop the hub and leave a blank NavHost —
  * exactly the bug a double-clicked back arrow produced on device.
+ *
+ * [openVerseOnLaunch] is the daily notification's whole deep-link story
+ * (TICKET-205): MainActivity reads one intent extra and the NavHost navigates to
+ * the verse screen exactly once — guarded by a saveable flag so a configuration
+ * change cannot replay it. Back from there lands on the hub, as always.
  */
 @Composable
-fun EnatNavHost(onRestartSetup: () -> Unit) {
+fun EnatNavHost(
+    onRestartSetup: () -> Unit,
+    openVerseOnLaunch: Boolean = false,
+) {
     val navController = rememberNavController()
+    var verseLaunchHandled by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (openVerseOnLaunch && !verseLaunchHandled) {
+            verseLaunchHandled = true
+            navController.navigate(EnatRoutes.VERSE)
+        }
+    }
     NavHost(navController = navController, startDestination = EnatRoutes.HUB) {
         composable(EnatRoutes.HUB) {
             HomeRoute(
@@ -72,7 +92,10 @@ fun EnatNavHost(onRestartSetup: () -> Unit) {
             DigestDetailRoute(onBack = dropUnlessResumed { navController.navigateUp() })
         }
         composable(EnatRoutes.VERSE) {
-            VersePlaceholderScreen(onBack = dropUnlessResumed { navController.navigateUp() })
+            VerseRoute(
+                onBack = dropUnlessResumed { navController.navigateUp() },
+                onNavigateToSetup = onRestartSetup,
+            )
         }
         composable(EnatRoutes.FAMILY_CALL) {
             FamilyCallRoute(onBack = dropUnlessResumed { navController.navigateUp() })

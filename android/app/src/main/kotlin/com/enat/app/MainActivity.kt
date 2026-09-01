@@ -21,6 +21,10 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The daily verse notification's deep link (TICKET-205): one extra, read
+        // once here — no deep-link framework for a single destination. The NavHost
+        // guards against replaying it on configuration changes.
+        val openVerse = intent.getBooleanExtra(EXTRA_OPEN_VERSE, false)
         setContent {
             EnatTheme {
                 // targetSdk 35 enforces edge-to-edge: without this, every screen's
@@ -38,11 +42,19 @@ class MainActivity : ComponentActivity() {
                         if (showSetup) {
                             SetupRoute(onSetupFinished = viewModel::onSetupFinished)
                         } else {
-                            EnatNavHost(onRestartSetup = viewModel::restartSetup)
+                            EnatNavHost(
+                                onRestartSetup = viewModel::restartSetup,
+                                openVerseOnLaunch = openVerse,
+                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    companion object {
+        /** Set by the verse notification's content intent (VerseNotificationWorker). */
+        const val EXTRA_OPEN_VERSE = "com.enat.app.extra.OPEN_VERSE"
     }
 }

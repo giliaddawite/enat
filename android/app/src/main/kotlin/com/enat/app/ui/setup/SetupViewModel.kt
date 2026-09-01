@@ -13,6 +13,8 @@ import com.enat.app.data.auth.GoogleAuthConfig
 import com.enat.app.data.auth.GoogleSignInGateway
 import com.enat.app.data.auth.SignInOutcome
 import com.enat.app.data.setup.SetupStateRepository
+import com.enat.app.notifications.NotificationPermissionGateway
+import com.enat.app.notifications.VerseReminderScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +31,8 @@ class SetupViewModel
         private val authorizationGateway: GmailAuthorizationGateway,
         private val consentRepository: GmailConsentRepository,
         private val setupStateRepository: SetupStateRepository,
+        private val notificationPermissionGateway: NotificationPermissionGateway,
+        private val verseReminderScheduler: VerseReminderScheduler,
     ) : ViewModel() {
         private val _uiState =
             MutableStateFlow<SetupUiState>(
@@ -107,7 +111,21 @@ class SetupViewModel
                 when (consentRepository.submitAuthCode(token, authCode)) {
                     ConsentSubmissionResult.Accepted -> {
                         setupStateRepository.markSetupComplete()
-                        SetupUiState.Success
+                        // Scheduling is gated on completion, so the first schedule
+                        // anchors here, right after consent — not on some later
+                        // app start.
+                        verseReminderScheduler.scheduleDailyReminder()
+                        // The notification ask comes after setup is already marked
+                        // complete: it is a bonus step, never a gate on the app.
+                        // The persisted asked-flag keeps a restarted setup (e.g.
+                        // the reconnect path) from re-asking after a denial.
+                        if (notificationPermissionGateway.needsRequest() &&
+                            !setupStateRepository.isNotificationPermissionRequested()
+                        ) {
+                            SetupUiState.NotificationPermissionStep
+                        } else {
+                            SetupUiState.Success
+                        }
                     }
                     ConsentSubmissionResult.InvalidGrant ->
                         SetupUiState.Error(SetupErrorKind.AUTHORIZATION_FAILED)
@@ -125,6 +143,18 @@ class SetupViewModel
                     ConsentSubmissionResult.Failed ->
                         SetupUiState.Error(SetupErrorKind.CONNECTION_FAILED)
                 }
+        }
+
+        /**
+         * The system permission dialog answered. Granted or denied, setup moves on
+         * to Success: a denial only means no morning reminder, and respecting it
+         * without protest is the graceful-degradation requirement (TICKET-205).
+         * The answer is recorded so no future setup run ever asks again.
+         */
+        fun onNotificationPermissionResult() {
+            if (_uiState.value != SetupUiState.NotificationPermissionStep) return
+            setupStateRepository.markNotificationPermissionRequested()
+            _uiState.value = SetupUiState.Success
         }
 
         private fun fail(

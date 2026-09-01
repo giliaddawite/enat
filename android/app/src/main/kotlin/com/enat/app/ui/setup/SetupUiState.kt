@@ -32,6 +32,14 @@ sealed interface SetupUiState {
 
     data object Connecting : SetupUiState
 
+    /**
+     * The final installer step (TICKET-205): ask for POST_NOTIFICATIONS so the
+     * daily verse reminder may fire. Only reached on Android 13+ while the
+     * permission is still undecided; a denial moves on to [Success] — the app
+     * works fully without notifications and never asks again.
+     */
+    data object NotificationPermissionStep : SetupUiState
+
     data object Success : SetupUiState
 
     data class Error(
