@@ -1,5 +1,5 @@
 import type { Request, RequestHandler, Response } from 'express';
-import { computeDigestETag, toDateKey, type Digest } from '../domain/digest.js';
+import { computeDigestETag, findLatestDigest, type Digest } from '../domain/digest.js';
 import {
   GmailNotConnectedError,
   GmailReconnectRequiredError,
@@ -23,10 +23,16 @@ export interface DigestRouteDependencies {
 }
 
 /**
- * The read path (TICKET-105's <300ms p95 criterion): one Firestore fetch of today's
- * document, nothing else. Never triggers generation — a missing digest is a 404 telling the
- * app to fall back to `POST /v1/digest/generate` (the missed-schedule fallback), not a slow
- * request that silently starts a Gmail sync and a Claude call inline.
+ * The read path (TICKET-105's <300ms p95 criterion): serves the *latest available* digest —
+ * the most recent one with date <= today (UTC) — not strictly today's. Generation keys its
+ * document to the UTC day, so between ~8 PM ET and midnight ET "today's" document doesn't
+ * exist yet while yesterday's full digest does; strict-today semantics showed mom "no new
+ * mail" every evening. `findLatestDigest` keeps this a point-read walk (one read in the
+ * common case, two in the evening gap; see its doc for the cap). The response's `date`
+ * field tells the client which day it got. Never triggers generation — a 404 (only when the
+ * user has no digest at all within the lookback) tells the app to fall back to
+ * `POST /v1/digest/generate` (the missed-schedule fallback), not a slow request that
+ * silently starts a Gmail sync and a Claude call inline.
  */
 export function getDigest(deps: DigestRouteDependencies): RequestHandler {
   return (req, res, next) => {
@@ -34,12 +40,15 @@ export function getDigest(deps: DigestRouteDependencies): RequestHandler {
   };
 }
 
-async function handleGet(req: Request, res: Response, deps: DigestRouteDependencies): Promise<void> {
+async function handleGet(
+  req: Request,
+  res: Response,
+  deps: DigestRouteDependencies,
+): Promise<void> {
   const user = requireUser(req);
-  const date = toDateKey(deps.now());
-  const digest = await deps.digests.get(user.uid, date);
+  const digest = await findLatestDigest((date) => deps.digests.get(user.uid, date), deps.now());
   if (digest === null) {
-    throw new HttpError(404, 'No digest has been generated for today yet.', {
+    throw new HttpError(404, 'No digest has been generated yet.', {
       code: 'digest_not_found',
     });
   }
