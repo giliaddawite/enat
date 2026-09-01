@@ -1,8 +1,6 @@
 package com.enat.app.data.auth
 
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import retrofit2.Response
 import java.io.IOException
 import java.net.HttpURLConnection
 import javax.inject.Inject
@@ -56,7 +54,7 @@ class NetworkGmailConsentRepository
                 // status: the ID token is dead and only a fresh sign-in can replace it.
                 return ConsentSubmissionResult.SessionExpired
             }
-            return when (errorCode(response)) {
+            return when (json.apiErrorCode(response.errorBody())) {
                 ApiErrorCode.INVALID_GRANT -> ConsentSubmissionResult.InvalidGrant
                 ApiErrorCode.NO_REFRESH_TOKEN -> ConsentSubmissionResult.NoRefreshToken
                 ApiErrorCode.INSUFFICIENT_SCOPE -> ConsentSubmissionResult.InsufficientScope
@@ -64,31 +62,5 @@ class NetworkGmailConsentRepository
                 ApiErrorCode.ACCOUNT_MISMATCH -> ConsentSubmissionResult.Failed
                 else -> ConsentSubmissionResult.Failed
             }
-        }
-
-        private fun errorCode(response: Response<Unit>): String? {
-            val errorBody = response.errorBody() ?: return null
-            val body =
-                try {
-                    errorBody.source().use { source ->
-                        // The envelope is tiny; cap the read so a hostile intermediary
-                        // cannot balloon memory with an arbitrarily large error body. A
-                        // truncated body simply fails to parse and lands on the generic path.
-                        source.request(MAX_ERROR_BODY_BYTES)
-                        source.buffer.readUtf8(minOf(source.buffer.size, MAX_ERROR_BODY_BYTES))
-                    }
-                } catch (unreadable: IOException) {
-                    return null
-                }
-            return try {
-                json.decodeFromString<ApiErrorEnvelope>(body).error.code
-            } catch (malformed: SerializationException) {
-                // Proxies and crash pages answer with non-envelope bodies; treat as generic.
-                null
-            }
-        }
-
-        private companion object {
-            const val MAX_ERROR_BODY_BYTES = 8L * 1024
         }
     }
