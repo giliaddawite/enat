@@ -23,3 +23,24 @@ fun dialPhoneNumber(
         Toast.makeText(context, R.string.dial_error, Toast.LENGTH_LONG).show()
     }
 }
+
+/**
+ * Opens one message in the Gmail app (TICKET-204's detail deep link). Pinned to the
+ * Gmail package: without it the https URL would open a browser sign-in page, which
+ * is a dead end on this phone. Gmail missing → a plain-Amharic toast.
+ */
+fun openMessageInGmail(
+    context: Context,
+    messageId: String,
+) {
+    val intent =
+        Intent(Intent.ACTION_VIEW, Uri.parse("https://mail.google.com/mail/#all/$messageId"))
+            .setPackage(GMAIL_PACKAGE)
+    try {
+        context.startActivity(intent)
+    } catch (gmailMissing: ActivityNotFoundException) {
+        Toast.makeText(context, R.string.detail_gmail_missing, Toast.LENGTH_LONG).show()
+    }
+}
+
+private const val GMAIL_PACKAGE = "com.google.android.gm"

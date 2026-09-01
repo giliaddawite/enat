@@ -36,9 +36,33 @@
     <string name="settings_delete_description">%1$s አጥፋ</string>
     <string name="settings_validation_error">ስም እና ትክክለኛ ስልክ ቁጥር ያስፈልጋሉ።</string>
 
-    <!-- የመልእክቶች ገጽ ርዕስ (TICKET-204) -->
+    <!-- የመልእክቶች ገጽ (TICKET-204) -->
     <string name="digest_title">የዛሬ መልእክቶች</string>
-    <string name="digest_placeholder_body">የመልእክቶች ገጽ በመዘጋጀት ላይ ነው።</string>
+    <string name="digest_loading">መልእክቶች በመጫን ላይ ናቸው…</string>
+    <string name="digest_generating">የዛሬው ማጠቃለያ በመዘጋጀት ላይ ነው። ጥቂት ጊዜ ሊወስድ ይችላል…</string>
+    <string name="digest_refresh_button">አድስ</string>
+    <string name="digest_refreshing">በማደስ ላይ ነው…</string>
+    <string name="digest_retry_button">እንደገና ይሞክሩ</string>
+    <string name="digest_empty">ዛሬ አዲስ መልእክት የለም</string>
+    <string name="digest_error_offline">የበይነመረብ ግንኙነት የለም። እባክዎ ግንኙነቱን ያረጋግጡ እና እንደገና ይሞክሩ።</string>
+    <string name="digest_error_generic">መልእክቶቹን ማምጣት አልተቻለም። እባክዎ እንደገና ይሞክሩ።</string>
+    <string name="digest_notice_offline">የበይነመረብ ግንኙነት የለም። የተቀመጡት መልእክቶች እየታዩ ነው።</string>
+    <string name="digest_notice_refresh_failed">ማደስ አልተሳካም። የተቀመጡት መልእክቶች እየታዩ ነው።</string>
+    <string name="digest_urgent_badge">አስቸኳይ</string>
+    <string name="category_important">አስፈላጊ</string>
+    <string name="category_bills_accounts">ክፍያዎች እና መለያዎች</string>
+    <string name="category_family_personal">ቤተሰብ እና የግል</string>
+    <string name="category_promotions_other">ማስታወቂያዎች እና ሌሎች</string>
+
+    <!-- የመልእክት ዝርዝር ገጽ (TICKET-204) -->
+    <string name="detail_title">መልእክት</string>
+    <string name="detail_sender_label">ላኪ</string>
+    <string name="detail_subject_label">ርዕስ</string>
+    <string name="detail_category_label">ምድብ</string>
+    <string name="detail_no_summary">ለዚህ መልእክት ማጠቃለያ የለም።</string>
+    <string name="detail_open_gmail_button">በGmail ይክፈቱ</string>
+    <string name="detail_gmail_missing">Gmail በዚህ ስልክ ላይ አልተገኘም።</string>
+    <string name="detail_not_found">ይህ መልእክት አልተገኘም።</string>
 
     <!-- One-time setup flow (TICKET-202). -->
     <string name="setup_title">እናትን ያዋቅሩ</string>

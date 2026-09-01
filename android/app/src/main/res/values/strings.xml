@@ -37,9 +37,33 @@
     <string name="settings_delete_description">Delete %1$s</string>
     <string name="settings_validation_error">A name and a valid phone number are required.</string>
 
-    <!-- Digest screen placeholder title (real screen lands with TICKET-204). -->
+    <!-- Digest screen (TICKET-204). -->
     <string name="digest_title">Today\'s mail</string>
-    <string name="digest_placeholder_body">The mail page is being prepared.</string>
+    <string name="digest_loading">Loading messages…</string>
+    <string name="digest_generating">Today\'s summary is being prepared. This can take a moment…</string>
+    <string name="digest_refresh_button">Refresh</string>
+    <string name="digest_refreshing">Updating…</string>
+    <string name="digest_retry_button">Try again</string>
+    <string name="digest_empty">No new mail today</string>
+    <string name="digest_error_offline">No internet connection. Please check the connection and try again.</string>
+    <string name="digest_error_generic">The messages could not be loaded. Please try again.</string>
+    <string name="digest_notice_offline">No internet connection. Showing the saved messages.</string>
+    <string name="digest_notice_refresh_failed">Updating did not work. Showing the saved messages.</string>
+    <string name="digest_urgent_badge">Urgent</string>
+    <string name="category_important">Important</string>
+    <string name="category_bills_accounts">Bills and accounts</string>
+    <string name="category_family_personal">Family and personal</string>
+    <string name="category_promotions_other">Promotions and other</string>
+
+    <!-- Message detail view (TICKET-204). -->
+    <string name="detail_title">Message</string>
+    <string name="detail_sender_label">Sender</string>
+    <string name="detail_subject_label">Subject</string>
+    <string name="detail_category_label">Category</string>
+    <string name="detail_no_summary">There is no summary for this message.</string>
+    <string name="detail_open_gmail_button">Open in Gmail</string>
+    <string name="detail_gmail_missing">Gmail was not found on this phone.</string>
+    <string name="detail_not_found">This message could not be found.</string>
 
     <!-- One-time setup flow (TICKET-202). Run by the installer, still Amharic-first. -->
     <string name="setup_title">Set up Enat</string>

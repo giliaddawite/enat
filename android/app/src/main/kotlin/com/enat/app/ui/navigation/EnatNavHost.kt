@@ -1,24 +1,14 @@
 package com.enat.app.ui.navigation
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.enat.app.R
-import com.enat.app.ui.components.BackButton
+import androidx.navigation.navArgument
+import com.enat.app.ui.digest.DigestDetailRoute
+import com.enat.app.ui.digest.DigestDetailViewModel
+import com.enat.app.ui.digest.DigestRoute
 import com.enat.app.ui.family.FamilyCallRoute
 import com.enat.app.ui.home.HomeRoute
 import com.enat.app.ui.settings.FamilySettingsRoute
@@ -28,17 +18,23 @@ import com.enat.app.ui.verse.VersePlaceholderScreen
 object EnatRoutes {
     const val HUB = "hub"
     const val DIGEST = "digest"
+    const val DIGEST_DETAIL = "digest/{${DigestDetailViewModel.MESSAGE_ID_ARG}}"
     const val VERSE = "verse"
     const val FAMILY_CALL = "family-call"
     const val FAMILY_SETTINGS = "family-settings"
+
+    fun digestDetail(messageId: String): String = "digest/$messageId"
 }
 
 /**
  * Navigation for the post-setup app. The hub is the launch destination; every
  * other screen is exactly one tap away from it (≤ 2 taps § CLAUDE.md).
+ *
+ * [onRestartSetup] re-enters the setup flow — the fix for a revoked Gmail grant,
+ * a never-connected account, or a dead sign-in session (TICKET-204).
  */
 @Composable
-fun EnatNavHost() {
+fun EnatNavHost(onRestartSetup: () -> Unit) {
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = EnatRoutes.HUB) {
         composable(EnatRoutes.HUB) {
@@ -49,6 +45,23 @@ fun EnatNavHost() {
                 onOpenSettings = { navController.navigate(EnatRoutes.FAMILY_SETTINGS) },
             )
         }
+        composable(EnatRoutes.DIGEST) {
+            DigestRoute(
+                onBack = { navController.popBackStack() },
+                onOpenDetail = { messageId -> navController.navigate(EnatRoutes.digestDetail(messageId)) },
+                onReconnect = onRestartSetup,
+                onNavigateToSetup = onRestartSetup,
+            )
+        }
+        composable(
+            EnatRoutes.DIGEST_DETAIL,
+            arguments =
+                listOf(
+                    navArgument(DigestDetailViewModel.MESSAGE_ID_ARG) { type = NavType.StringType },
+                ),
+        ) {
+            DigestDetailRoute(onBack = { navController.popBackStack() })
+        }
         composable(EnatRoutes.VERSE) {
             VersePlaceholderScreen(onBack = { navController.popBackStack() })
         }
@@ -57,39 +70,6 @@ fun EnatNavHost() {
         }
         composable(EnatRoutes.FAMILY_SETTINGS) {
             FamilySettingsRoute(onBack = { navController.popBackStack() })
-        }
-        composable(EnatRoutes.DIGEST) {
-            // TICKET-204 (same PR) replaces this with the real digest screen; the
-            // labeled Amharic placeholder keeps the hub button honest until then.
-            DigestPlaceholderScreen(onBack = { navController.popBackStack() })
-        }
-    }
-}
-
-@Composable
-private fun DigestPlaceholderScreen(onBack: () -> Unit) {
-    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                BackButton(onBack = onBack)
-                Text(
-                    text = stringResource(R.string.digest_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            Text(
-                text = stringResource(R.string.digest_placeholder_body),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(top = 48.dp),
-            )
         }
     }
 }

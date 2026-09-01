@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
                 if (showSetup) {
                     SetupRoute(onSetupFinished = viewModel::onSetupFinished)
                 } else {
-                    EnatNavHost()
+                    EnatNavHost(onRestartSetup = viewModel::restartSetup)
                 }
             }
         }
