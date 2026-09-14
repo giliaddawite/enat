@@ -1,0 +1,11 @@
+TICKET-305: Backend formatting baseline & Prettier CI gate
+
+Priority: P1 · Estimate: 1 pt · Depends on: 301
+CLAUDE.md says "Formatting is not a matter of opinion. Prettier decides", but nothing enforces it: `prettier --check .` fails on 25 files under `backend/src` at HEAD, and the PR workflow never runs it. Every backend change since TICKET-101 has drifted because the no-reformat-untouched-lines rule forbids fixing it incidentally. Discovered while landing TICKET-301.
+
+Acceptance criteria
+
+- One `chore(backend): format with prettier` commit that touches formatting only — no behavior change, reviewed by diffing with whitespace ignored
+- `prettier --check .` passes in `/backend`
+- `.github/workflows/pr.yml` backend job runs `npm run format:check` (add the script; `npm run format` stays the write command) and fails the PR on drift
+- CLAUDE.md command table gains the check command so the next session runs it before pushing

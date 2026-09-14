@@ -1,11 +1,11 @@
 import type { RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import {
   GmailNotConnectedError,
   GmailReconnectRequiredError,
   type DigestGenerationService,
 } from '../domain/digestGeneration.js';
 import type { User } from '../domain/user.js';
+import { DigestGenerationPushPayload, PubSubPushEnvelope } from '../http/apiSchemas.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -31,18 +31,6 @@ export interface DigestGenerationPushDependencies {
   readonly generation: DigestGenerationService;
   readonly logger?: Logger;
 }
-
-const PushMessage = z.object({
-  data: z.string().min(1),
-});
-
-const PushEnvelope = z.object({
-  message: PushMessage,
-});
-
-const PushPayload = z.object({
-  uid: z.string().min(1),
-});
 
 export function createDigestGenerationPushHandler(
   deps: DigestGenerationPushDependencies,
@@ -91,7 +79,7 @@ async function handle(
 /** `null` means "not retryable" — the caller acks (200) instead of asking Pub/Sub to retry
  * a message that will never parse. */
 function parseUid(body: unknown, logger: Logger | undefined): string | null {
-  const envelope = PushEnvelope.safeParse(body);
+  const envelope = PubSubPushEnvelope.safeParse(body);
   if (!envelope.success) {
     logger?.error('pubsub push envelope failed validation');
     return null;
@@ -103,7 +91,7 @@ function parseUid(body: unknown, logger: Logger | undefined): string | null {
     logger?.error('pubsub push message data was not valid JSON');
     return null;
   }
-  const parsedPayload = PushPayload.safeParse(payload);
+  const parsedPayload = DigestGenerationPushPayload.safeParse(payload);
   if (!parsedPayload.success) {
     logger?.error('pubsub push message payload failed validation');
     return null;

@@ -1,11 +1,12 @@
 import type { Request, RequestHandler, Response } from 'express';
-import { computeDigestETag, findLatestDigest, type Digest } from '../domain/digest.js';
+import { computeDigestETag, findLatestDigest } from '../domain/digest.js';
 import {
   GmailNotConnectedError,
   GmailReconnectRequiredError,
   type DigestGenerationService,
   type DigestStore,
 } from '../domain/digestGeneration.js';
+import type { DigestResponse } from '../http/apiSchemas.js';
 import { HttpError } from '../http/httpError.js';
 import { requireUser } from '../http/requireUser.js';
 import type { Logger } from '../logging/logger.js';
@@ -93,7 +94,7 @@ async function handleGenerate(
   }
 }
 
-function respondWithDigest(req: Request, res: Response, digest: Digest): void {
+function respondWithDigest(req: Request, res: Response, digest: DigestResponse): void {
   const etag = computeDigestETag(digest);
   res.setHeader('ETag', etag);
   // Per-user data behind auth: revalidate on every request (via ETag) rather than letting a

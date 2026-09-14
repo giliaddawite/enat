@@ -42,6 +42,8 @@ Run commands from the package directory (`/android` or `/backend`), not the repo
 | Install dependencies | `npm ci` | Gradle sync (automatic) |
 | Run locally | `npm run dev` | `./gradlew installDebug` |
 | Run all tests | `npm test` | `./gradlew testDebugUnitTest` |
+| Run tests as CI gates them | `npm run test:coverage` (≥ 80% per file over `src/domain`) | `./gradlew testDebugUnitTest verifyRoborazziDebug` (font-scale screenshot goldens) |
+| Re-record screenshot goldens | — | `./gradlew recordRoborazziDebug` (commit the PNGs under `app/src/test/screenshots`) |
 | Run a single test | `npm test -- <file>` | `./gradlew testDebugUnitTest --tests "<pattern>"` |
 | Lint | `npm run lint` | `./gradlew ktlintCheck` |
 | Format | `npm run format` | `./gradlew ktlintFormat` |

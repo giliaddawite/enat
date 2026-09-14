@@ -7,6 +7,7 @@ import {
   type DailyVerse,
   type DailyVerseSource,
 } from '../domain/verse.js';
+import type { VerseResponse } from '../http/apiSchemas.js';
 
 /**
  * `GET /v1/verse/today` (TICKET-106). Thin like the digest routes: which verse "today"
@@ -77,7 +78,7 @@ export function getVerseToday(deps: VerseRouteDependencies): RequestHandler {
 function respondWithVerse(
   req: Request,
   res: Response,
-  verse: DailyVerse,
+  verse: VerseResponse,
   etag: string,
   cacheControl: string,
 ): void {
