@@ -93,6 +93,7 @@ TICKET-101 (backend) / TICKET-201 (Android).
 | --- | --- |
 | Backend dev server | `npm run dev` |
 | Backend tests | `npm test` |
+| Backend tests with the CI coverage gate | `npm run test:coverage` |
 | Backend lint | `npm run lint` |
 | Backend type check | `npm run typecheck` |
 | Android debug build | `./gradlew assembleDebug` |
