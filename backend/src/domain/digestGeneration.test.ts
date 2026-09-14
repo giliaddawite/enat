@@ -10,6 +10,7 @@ import type { DigestSummarizer } from './digestPipeline.js';
 import type { Email } from './email.js';
 import type { GmailSyncService } from './gmailSync.js';
 import type { User } from './user.js';
+import { captureLogs } from '../testing/httpTestServer.js';
 
 const USER: User = {
   uid: 'uid-1',
@@ -176,5 +177,52 @@ describe('createDigestGenerationService', () => {
 
     await expect(service.generate(USER)).rejects.toBeInstanceOf(GmailNotConnectedError);
     expect(digests.saved).toHaveLength(0);
+  });
+});
+
+describe('createDigestGenerationService logging', () => {
+  it('reports uid, date and email count for a fresh run — never a summary', async () => {
+    const logs = captureLogs();
+    const service = createDigestGenerationService({
+      digests: fakeDigestStore(),
+      buildPipeline: (): DigestUserPipeline => ({
+        gmailSync: fakeGmailSync(),
+        summarizer: fakeSummarizer(),
+      }),
+      now: NOW,
+      logger: logs.logger,
+    });
+
+    await service.generate(USER);
+
+    expect(logs.entries.find((entry) => entry.message === 'digest generated')).toMatchObject({
+      severity: 'INFO',
+      uid: 'uid-1',
+      date: '2026-08-17',
+      emailCount: 1,
+    });
+    expect(JSON.stringify(logs.entries)).not.toContain('ደህና ናት');
+  });
+
+  it('reports the skipped write when a rerun changes nothing', async () => {
+    const logs = captureLogs();
+    const service = createDigestGenerationService({
+      digests: fakeDigestStore(),
+      buildPipeline: (): DigestUserPipeline => ({
+        gmailSync: fakeGmailSync(),
+        summarizer: fakeSummarizer(),
+      }),
+      now: NOW,
+      logger: logs.logger,
+    });
+
+    await service.generate(USER);
+    await service.generate(USER);
+
+    expect(
+      logs.entries.find(
+        (entry) => entry.message === 'digest generation found no change; skipped write',
+      ),
+    ).toMatchObject({ severity: 'INFO', uid: 'uid-1', date: '2026-08-17' });
   });
 });

@@ -1,10 +1,10 @@
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import {
   AuthCodeExchangeUnavailableError,
   GmailConsentRejectedError,
   type GmailConsentService,
 } from '../domain/gmailConsent.js';
+import { GmailConsentRequest } from '../http/apiSchemas.js';
 import { HttpError } from '../http/httpError.js';
 import { requireUser } from '../http/requireUser.js';
 
@@ -26,10 +26,6 @@ import { requireUser } from '../http/requireUser.js';
  * Mounted on the `v1` router in `app.ts`, so `authenticate` has already resolved `req.user`.
  */
 
-const ConsentRequest = z.object({
-  authCode: z.string().min(1),
-});
-
 export interface GmailConsentRouteDependencies {
   readonly consent: GmailConsentService;
 }
@@ -47,7 +43,7 @@ async function handle(
 ): Promise<void> {
   const user = requireUser(req);
 
-  const body = ConsentRequest.safeParse(req.body);
+  const body = GmailConsentRequest.safeParse(req.body);
   if (!body.success) {
     // The zod issues are deliberately not forwarded: they would echo whatever the body
     // held, and this endpoint's bodies carry credentials.

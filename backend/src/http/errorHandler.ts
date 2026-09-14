@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from 'express';
 import type { LogFields, Logger } from '../logging/logger.js';
+import type { ErrorResponse } from './apiSchemas.js';
 import { HttpError, statusText, statusToCode } from './httpError.js';
 
 interface ClientError {
@@ -32,13 +33,14 @@ export function errorHandler(fallbackLogger: Logger): ErrorRequestHandler {
       log.warn('request rejected', { status: clientError.status, code: clientError.code });
     }
 
-    res.status(clientError.status).json({
+    const body: ErrorResponse = {
       error: {
         code: clientError.code,
         message: clientError.message,
         requestId: req.requestId,
       },
-    });
+    };
+    res.status(clientError.status).json(body);
   };
 }
 

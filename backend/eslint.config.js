@@ -23,7 +23,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['eslint.config.js'],
+    files: ['eslint.config.js', 'vitest.config.ts'],
     ...tseslint.configs.disableTypeChecked,
   },
   prettier,
