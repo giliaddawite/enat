@@ -20,8 +20,8 @@ class FamilyCallViewModelTest {
 
     private val contacts =
         listOf(
-            FamilyContact(id = 1, name = "ሙሉ", phoneNumber = "+15551234567"),
-            FamilyContact(id = 2, name = "ሳራ", phoneNumber = "+15559876543"),
+            FamilyContact(id = 1, name = "ሙሉ", phoneNumber = "+15555550101"),
+            FamilyContact(id = 2, name = "ሳራ", phoneNumber = "+15555550102"),
         )
 
     @Test
