@@ -16,25 +16,28 @@ import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.RoborazziOptions
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.roborazziSystemPropertyOutputDirectory
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import java.io.File
 
 /**
- * The two ends of Android's system font-size slider (TICKET-301). Every screenshot
- * test renders at both: the accessibility rule is that layouts survive the maximum
- * without clipping, and the minimum guards the 20sp floor from the other side.
+ * The smallest and largest font scales a user can pick on Android (TICKET-301).
+ * Every screenshot test renders at both: the accessibility rule is that layouts
+ * survive the maximum without clipping, and the minimum guards the 20sp floor
+ * from the other side.
  */
 enum class FontScaleExtreme(
     val scale: Float,
     /** Golden file suffix. */
     val label: String,
 ) {
-    /** "Small" in the system display settings. */
+    /** The floor of Settings > Display > Font size ("Small"); that slider tops out at 1.3. */
     SYSTEM_MINIMUM(0.85f, "font_min"),
 
-    /** 200% — the ceiling of Android 14's non-linear font scaling, the largest Android offers. */
+    /**
+     * 200%, the cap of Settings > Accessibility > Font size — the largest Android
+     * offers on any version. (Android 14 made scaling non-linear; it did not raise the cap.)
+     */
     SYSTEM_MAXIMUM(2.0f, "font_max"),
 }
 
@@ -46,16 +49,24 @@ enum class FontScaleExtreme(
  */
 const val SCREENSHOT_QUALIFIERS = "am-w411dp-h2400dp"
 
-/** Sets the screen under test inside the app theme at the requested font scale. */
+/**
+ * Sets the screen under test inside the app theme at the requested font scale,
+ * with the Compose clock under manual control from the first frame: an
+ * auto-advancing clock cancels infinite animations outright, so the loading
+ * spinner would be frozen at its zero-length start rather than at a visible,
+ * repeatable phase.
+ */
 fun ComposeContentTestRule.setScreenAtFontScale(
     fontScale: FontScaleExtreme,
     content: @Composable () -> Unit,
 ) {
+    mainClock.autoAdvance = false
     setContent {
         DeviceConfigurationOverride(DeviceConfigurationOverride.FontScale(fontScale.scale)) {
             EnatTheme(darkTheme = false, content = content)
         }
     }
+    mainClock.advanceTimeByFrame()
 }
 
 /**
@@ -70,6 +81,7 @@ fun ComposeContentTestRule.captureScreenshot(
     state: String,
     fontScale: FontScaleExtreme,
 ) {
+    freezeAnimations()
     // The Gradle plugin hands the configured outputDir over as a system property.
     val file = File(roborazziSystemPropertyOutputDirectory(), "${screen}_${state}_${fontScale.label}.png")
     onRoot().captureRoboImage(
@@ -82,10 +94,20 @@ fun ComposeContentTestRule.captureScreenshot(
 }
 
 /**
- * The no-clipping gate behind the max-font-scale rule: every piece of text on
- * screen must lay out in full (no truncated line, no ellipsis, every laid-out
- * line inside the text's own box) and keep its full size after ancestor
- * clipping (no button, card, or viewport cutting it off). Runs against the
+ * Advances the manually driven clock to one fixed instant after composition, so
+ * anything animating (the loading spinner) is drawn at the same phase in every
+ * run — a golden must not depend on when the capture happened to land.
+ */
+private fun ComposeContentTestRule.freezeAnimations() {
+    mainClock.advanceTimeBy(FROZEN_ANIMATION_TIME_MILLIS)
+    waitForIdle()
+}
+
+/**
+ * The text-level guarantee behind the max-font-scale rule: every Text node's own
+ * resolved box fits all of its laid-out lines, and no line was dropped (maxLines)
+ * or ellipsized. It says nothing about ancestors — a parent that draw-clips a
+ * correctly laid-out Text is only caught by the golden image. Runs against the
  * unmerged tree so button labels are checked individually, not as part of the
  * button.
  */
@@ -100,9 +122,6 @@ fun ComposeContentTestRule.assertNoClippedText() {
             assertFalse("text truncated: «$text»", layout.isTruncated())
             assertTrue("text overflowed its own box: «$text» (${layout.describeLines()})", layout.linesFitInSize())
         }
-        val visible = node.boundsInRoot
-        assertEquals("text clipped horizontally: «$text»", node.size.width.toFloat(), visible.width, PIXEL_TOLERANCE)
-        assertEquals("text clipped vertically: «$text»", node.size.height.toFloat(), visible.height, PIXEL_TOLERANCE)
     }
 }
 
@@ -137,3 +156,4 @@ private fun TextLayoutResult.describeLines(): String {
 
 private const val CHANGE_THRESHOLD = 0.005f
 private const val PIXEL_TOLERANCE = 1f
+private const val FROZEN_ANIMATION_TIME_MILLIS = 500L

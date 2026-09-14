@@ -86,11 +86,19 @@ class DigestScreenScreenshotTest(
     }
 
     @Test
-    fun loading() {
+    fun loadingFirstOpen() {
+        setScreen(DigestUiState.Loading(DigestUiState.LoadingKind.LOADING))
+
+        composeTestRule.assertNoClippedText()
+        composeTestRule.captureScreenshot(SCREEN, "loading_first_open", fontScale)
+    }
+
+    @Test
+    fun loadingGenerating() {
         setScreen(DigestUiState.Loading(DigestUiState.LoadingKind.GENERATING))
 
         composeTestRule.assertNoClippedText()
-        composeTestRule.captureScreenshot(SCREEN, "loading", fontScale)
+        composeTestRule.captureScreenshot(SCREEN, "loading_generating", fontScale)
     }
 
     @Test
@@ -111,11 +119,19 @@ class DigestScreenScreenshotTest(
     }
 
     @Test
-    fun error() {
+    fun errorOffline() {
         setScreen(DigestUiState.Error(DigestErrorKind.OFFLINE))
 
         composeTestRule.assertNoClippedText()
-        composeTestRule.captureScreenshot(SCREEN, "error", fontScale)
+        composeTestRule.captureScreenshot(SCREEN, "error_offline", fontScale)
+    }
+
+    @Test
+    fun errorGeneric() {
+        setScreen(DigestUiState.Error(DigestErrorKind.GENERIC))
+
+        composeTestRule.assertNoClippedText()
+        composeTestRule.captureScreenshot(SCREEN, "error_generic", fontScale)
     }
 
     @Test
