@@ -1,0 +1,10 @@
+TICKET-306: Document the coverage-gated backend test command
+
+Priority: P2 · Estimate: 0.5 pt · Depends on: 301
+TICKET-301 added `npm run test:coverage` as the backend command CI actually gates on (per-file ≥ 80% over `src/domain`). `npm test` still runs the suite but skips the coverage threshold, so a contributor following README.md or CLAUDE.md can go green locally and red in CI.
+
+Acceptance criteria
+
+- README.md "Everyday commands" table lists `npm run test:coverage` as the command that matches CI, with `npm test` kept as the fast iteration command
+- CLAUDE.md command table gains a "Run tests with coverage gate" row for the backend column
+- Both files say explicitly that the coverage gate applies to `backend/src/domain` only
