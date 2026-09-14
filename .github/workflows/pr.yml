@@ -55,7 +55,7 @@ jobs:
       - run: npm run test:coverage
 
   android:
-    name: android (ktlint, test, assembleDebug)
+    name: android (ktlint, test, screenshots, assembleDebug)
     needs: detect
     if: needs.detect.outputs.android == 'true'
     runs-on: ubuntu-latest
@@ -70,7 +70,17 @@ jobs:
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew ktlintCheck
-      - run: ./gradlew testDebugUnitTest
+      # TICKET-301: one JVM test run covers the ViewModel/Compose tests and the
+      # font-scale screenshot goldens — verifyRoborazziDebug flips the same
+      # testDebugUnitTest task into verify mode, so listing both runs it once.
+      - run: ./gradlew testDebugUnitTest verifyRoborazziDebug
+      - name: upload screenshot diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roborazzi-diffs
+          path: android/app/build/outputs/roborazzi
+          if-no-files-found: ignore
       - run: ./gradlew assembleDebug
 
   pr-required-checks:

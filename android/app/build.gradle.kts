@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.roborazzi)
 }
 
 // Crashlytics needs a google-services.json, which only exists once the Firebase
@@ -141,6 +142,13 @@ android {
     }
 }
 
+// Screenshot goldens (TICKET-301) live in the source tree, not build/, so they are
+// committed and diffed like any other test fixture. Record with
+// `./gradlew recordRoborazziDebug`; CI verifies with `verifyRoborazziDebug`.
+roborazzi {
+    outputDir.set(layout.projectDirectory.dir("src/test/screenshots"))
+}
+
 ktlint {
     android.set(true)
     filter {
@@ -207,6 +215,10 @@ dependencies {
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    // Screenshot tests at both font-scale extremes, rendered by Robolectric's
+    // native graphics on the JVM — same runner as the UI tests above.
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
     // Merged into the debug manifest so Robolectric-driven Compose tests can
     // launch the test activity.
     debugImplementation(libs.androidx.compose.ui.test.manifest)
