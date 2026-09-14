@@ -12,6 +12,7 @@ import {
 import type { Email } from './email.js';
 import { PROMPT_VERSION } from './summarizationPrompt.js';
 import type { CacheableEmailSummary, EmailSummary } from './summary.js';
+import { captureLogs, type CapturedLog } from '../testing/httpTestServer.js';
 
 const UID = 'google-user-123';
 const TODAY = '2026-08-25';
@@ -97,18 +98,21 @@ function summarizerWith(
     seed?: readonly EmailSummary[];
     bodies?: Record<string, string>;
     maxInputTokens?: number;
+    cache?: SummaryCacheStore;
+    logs?: CapturedLog;
   } = {},
 ) {
   const scripted = fakeSummarizer(replies);
-  const { cache, writes } = fakeCache(options.seed);
+  const { cache: seededCache, writes } = fakeCache(options.seed);
   const { fetchBodies, calls } = fakeBodies(options.bodies);
   const digest = createDigestSummarizer({
     summarizer: scripted.summarizer,
-    cache,
+    cache: options.cache ?? seededCache,
     fetchBodies,
     today: () => TODAY,
     nonce: () => 'testnonce',
     ...(options.maxInputTokens === undefined ? {} : { maxInputTokens: options.maxInputTokens }),
+    ...(options.logs === undefined ? {} : { logger: options.logs.logger }),
   });
   return { digest, requests: scripted.requests, writes, bodyCalls: calls };
 }
@@ -439,5 +443,216 @@ describe('heuristicSummary', () => {
   it('never claims urgency and carries no prompt version', () => {
     const summary = heuristicSummary(email('a'));
     expect(summary).toMatchObject({ urgent: false, summary: null, promptVersion: null });
+  });
+});
+
+describe('planDigestBatch with one oversized email', () => {
+  it('overflows only that email, still admitting the smaller ones behind it', () => {
+    const oversized = email('big', { subject: 'x'.repeat(2_000) });
+    const emails = [oversized, email('a')];
+    const cap = PROMPT_OVERHEAD_TOKENS + BODY_TOKENS_PER_EMAIL + 200;
+
+    const plan = planDigestBatch(emails, cap);
+
+    expect(plan.llm.map((item) => item.id)).toEqual(['a']);
+    expect(plan.heuristicOnly.map((item) => item.id)).toEqual(['big']);
+  });
+});
+
+describe('parseLlmBatchResponse with balanced braces', () => {
+  it('rejects a reply whose JSON still does not parse', () => {
+    const ids = new Set(['a']);
+
+    const result = parseLlmBatchResponse('{"summaries": [}', ids, { allowPartialCoverage: false });
+
+    expect(result.kind).toBe('invalid');
+  });
+});
+
+describe('createDigestSummarizer without an injected nonce', () => {
+  it('stamps every email block in a request with the same 8-character marker', async () => {
+    const emails = [email('a'), email('b')];
+    const scripted = fakeSummarizer([replyFor(emails)]);
+    const digest = createDigestSummarizer({
+      summarizer: scripted.summarizer,
+      cache: fakeCache().cache,
+      fetchBodies: fakeBodies().fetchBodies,
+      today: () => TODAY,
+    });
+
+    await digest.summarize(UID, emails);
+
+    const markers = [...(scripted.requests[0]?.user ?? '').matchAll(/<email-([^ >]+) id=/g)].map(
+      (match) => match[1],
+    );
+    expect(markers).toHaveLength(2);
+    expect(markers[0]).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    expect(markers[1]).toBe(markers[0]);
+  });
+});
+
+describe('createDigestSummarizer logging', () => {
+  /** Fragments of the fixture emails and summaries that must never reach a log line. */
+  const CONTENT = ['subject a', 'snippet a', 'body of a', 'ማጠቃለያ a', 'a@sender.example'];
+
+  function expectNoContentIn(logs: CapturedLog): void {
+    const serialized = JSON.stringify(logs.entries);
+    for (const fragment of CONTENT) {
+      expect(serialized).not.toContain(fragment);
+    }
+  }
+
+  function entry(logs: CapturedLog, message: string) {
+    return logs.entries.find((candidate) => candidate.message === message);
+  }
+
+  it('reports uid, prompt version and counts on completion', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const { digest } = summarizerWith([replyFor(emails)], { logs, bodies: { a: 'body of a' } });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'digest summarization completed')).toMatchObject({
+      severity: 'INFO',
+      uid: UID,
+      promptVersion: PROMPT_VERSION,
+      fromCache: 0,
+      fromLlm: 1,
+      heuristicOnly: 0,
+    });
+  });
+
+  it('never writes email content or a summary into a log line', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const { digest } = summarizerWith(['nope', replyFor(emails)], {
+      logs,
+      bodies: { a: 'body of a' },
+    });
+
+    await digest.summarize(UID, emails);
+
+    expectNoContentIn(logs);
+  });
+
+  it('warns with the batch size when the first reply fails validation', async () => {
+    const logs = captureLogs();
+    const emails = [email('a'), email('b')];
+    const { digest } = summarizerWith(['nope', replyFor(emails)], { logs });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'digest batch reply failed validation; retrying once')).toMatchObject({
+      severity: 'WARNING',
+      emailCount: 2,
+      promptVersion: PROMPT_VERSION,
+    });
+  });
+
+  it('warns with the covered count when the retry leaves emails uncovered', async () => {
+    const logs = captureLogs();
+    const emails = [email('a'), email('b')];
+    const partial = replyFor([email('a')]);
+    const { digest } = summarizerWith([partial, partial], { logs });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'digest batch retry left emails uncovered')).toMatchObject({
+      severity: 'WARNING',
+      emailCount: 2,
+      coveredCount: 1,
+    });
+  });
+
+  it('reports the fall-back after the retry also fails, without echoing the reply', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const { digest } = summarizerWith(['nope', 'still nope'], { logs });
+
+    await digest.summarize(UID, emails);
+
+    expect(
+      entry(logs, 'digest batch reply invalid after retry; falling back to heuristics'),
+    ).toMatchObject({ severity: 'ERROR', emailCount: 1 });
+    expect(JSON.stringify(logs.entries)).not.toContain('still nope');
+  });
+
+  it('names only the error class when the LLM call fails', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const { digest } = summarizerWith([new Error('api unavailable: quota detail')], { logs });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'digest batch call failed; falling back to heuristics')).toMatchObject({
+      severity: 'ERROR',
+      emailCount: 1,
+      errorName: 'Error',
+    });
+    expect(JSON.stringify(logs.entries)).not.toContain('quota detail');
+  });
+
+  it('describes a non-Error rejection by its type alone', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const digest = createDigestSummarizer({
+      summarizer: {
+        complete: () => {
+          const rejection: unknown = 'leaky detail';
+          throw rejection;
+        },
+      },
+      cache: fakeCache().cache,
+      fetchBodies: fakeBodies().fetchBodies,
+      today: () => TODAY,
+      nonce: () => 'testnonce',
+      logger: logs.logger,
+    });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'digest batch call failed; falling back to heuristics')).toMatchObject({
+      errorName: 'string',
+    });
+    expect(JSON.stringify(logs.entries)).not.toContain('leaky detail');
+  });
+
+  it('reports a failed cache read as a count and an error class', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const { digest } = summarizerWith([replyFor(emails)], {
+      logs,
+      cache: {
+        getMany: () => Promise.reject(new Error('firestore unavailable')),
+        setMany: () => Promise.resolve(),
+      },
+    });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'summary cache read failed; treating all emails as uncached')).toMatchObject(
+      { severity: 'WARNING', count: 1, errorName: 'Error' },
+    );
+  });
+
+  it('reports a failed cache write as a count and an error class', async () => {
+    const logs = captureLogs();
+    const emails = [email('a')];
+    const { digest } = summarizerWith([replyFor(emails)], {
+      logs,
+      cache: {
+        getMany: () => Promise.resolve(new Map()),
+        setMany: () => Promise.reject(new Error('firestore unavailable')),
+      },
+    });
+
+    await digest.summarize(UID, emails);
+
+    expect(entry(logs, 'summary cache write failed; digest continues uncached')).toMatchObject({
+      severity: 'WARNING',
+      count: 1,
+      errorName: 'Error',
+    });
   });
 });
