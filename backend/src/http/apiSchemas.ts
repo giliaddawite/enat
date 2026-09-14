@@ -15,6 +15,12 @@ import type { DailyVerse } from '../domain/verse.js';
  * so the contract tests reject a response carrying a field the schema does not name — the
  * pipeline-internal `source`/`promptVersion` on a summary, or the dataset's review-only
  * `verified` flag on a verse, must never reach the app.
+ *
+ * Response schemas are asserted in the contract tests only, never on the response path.
+ * `GET /v1/digest` carries a < 300ms p95 target and its payload comes straight from the
+ * pipeline's own typed output; a full zod walk over up to 50 summaries on every request
+ * would re-check data that is already trusted. Routes import the response types with
+ * `import type` so nothing here reaches the runtime of a read.
  */
 
 /** The envelope every non-2xx response carries (see `errorHandler`). `requestId` is absent

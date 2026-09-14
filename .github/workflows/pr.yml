@@ -81,6 +81,9 @@ jobs:
           name: roborazzi-diffs
           path: android/app/build/outputs/roborazzi
           if-no-files-found: ignore
+          # Diffs are renders of synthetic fixtures, but they are inbox-shaped UI;
+          # a week is enough to debug a red run without a 90-day copy in the store.
+          retention-days: 7
       - run: ./gradlew assembleDebug
 
   pr-required-checks:

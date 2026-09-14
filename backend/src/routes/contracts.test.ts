@@ -101,7 +101,7 @@ const DIGEST: Digest = {
     },
     {
       category: 'family_personal',
-      items: [item('msg-4', 'Selam <selam@gmail.com>', 'Hi', 'ሰላም ትላለች', false)],
+      items: [item('msg-4', 'Selam <selam@example.com>', 'Hi', 'ሰላም ትላለች', false)],
     },
     {
       category: 'promotions_other',
