@@ -29,6 +29,15 @@ class MainViewModelTest {
         assertFalse(viewModel.showSetup.value)
     }
 
+    @Test
+    fun `restarting setup re-enters the flow even after it completed once`() {
+        val viewModel = MainViewModel(FakeSetupStateRepository(complete = true))
+
+        viewModel.restartSetup()
+
+        assertTrue(viewModel.showSetup.value)
+    }
+
     private class FakeSetupStateRepository(
         private var complete: Boolean,
     ) : SetupStateRepository {
