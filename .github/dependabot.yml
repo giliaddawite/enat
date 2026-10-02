@@ -1,0 +1,38 @@
+# TICKET-303: dependency vulnerability scanning. Dependabot opens PRs for security
+# advisories as they are published and for routine version drift once a week, so a
+# vulnerable transitive dependency is a PR in the queue rather than something found
+# during the next audit. The PR workflow (lint, format, typecheck, tests, gitleaks) gates
+# every one of them like any other change.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # The Google Cloud client libraries move together and share gax/grpc transitives;
+      # one PR per week for the set keeps the lockfile churn reviewable.
+      google-cloud:
+        patterns:
+          - "@google-cloud/*"
+      # Lint, format, type and test tooling never reaches the container image.
+      dev-tooling:
+        dependency-type: development
+    commit-message:
+      prefix: chore(backend)
+
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore(android)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
