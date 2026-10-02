@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { stripSummaryFormatControls, type SummaryCacheStore } from '../domain/digestPipeline.js';
+import { isSafeId } from '../domain/safeId.js';
 import { EMAIL_CATEGORIES, type EmailSummary } from '../domain/summary.js';
 import type { Logger } from '../logging/logger.js';
 import type { FirestoreLike } from './usersRepository.js';
@@ -30,14 +31,6 @@ const FIRESTORE_ALREADY_EXISTS_CODE = 6;
  * without needing a batched `getAll` on the narrow FirestoreLike interface. */
 const READ_CONCURRENCY = 100;
 
-/**
- * Ids are interpolated into a document path, so their shape is enforced at this
- * boundary: Gmail message ids and Google user ids are URL-safe tokens, and anything
- * else (a `/`, a stray `_`-ambiguity attack) must not be able to address another
- * user's — or a nested — document.
- */
-const SAFE_ID = /^[A-Za-z0-9-]+$/;
-
 export interface SummaryCacheRepositoryOptions {
   /** The prompt version results are cached under. Part of every document key: bumping
    * the prompt re-summarizes mail under the new version instead of serving stale — or
@@ -53,16 +46,17 @@ export function createFirestoreSummaryCacheStore(
   firestore: FirestoreLike,
   options: SummaryCacheRepositoryOptions,
 ): SummaryCacheStore {
-  if (!SAFE_ID.test(options.promptVersion)) {
+  if (!isSafeId(options.promptVersion)) {
     // The version is a repo-owned constant, but it shares the document path with the
-    // shape-checked ids — enforce the invariant where it is stated, and fail at boot.
+    // shape-checked ids (see `domain/safeId.ts`) — enforce the invariant where it is
+    // stated, and fail at boot.
     throw new Error('promptVersion must match the safe document-id charset');
   }
   const now = options.now ?? (() => new Date());
   const collection = firestore.collection(SUMMARY_COLLECTION);
 
   function documentId(uid: string, messageId: string): string | null {
-    if (!SAFE_ID.test(uid) || !SAFE_ID.test(messageId)) {
+    if (!isSafeId(uid) || !isSafeId(messageId)) {
       options.logger?.warn('summary cache id rejected by shape check', {
         uidLength: uid.length,
         messageIdLength: messageId.length,

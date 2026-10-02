@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { DigestStore } from '../domain/digestGeneration.js';
 import type { Digest, DigestEmailItem, DigestSection } from '../domain/digest.js';
+import { isSafeId } from '../domain/safeId.js';
 import { EMAIL_CATEGORIES } from '../domain/summary.js';
 import type { Logger } from '../logging/logger.js';
 import type { FirestoreLike } from './usersRepository.js';
@@ -17,10 +18,9 @@ const DIGESTS_COLLECTION = 'digests';
 /** The gRPC status code Firestore raises from `create()` on a conflicting document. */
 const FIRESTORE_ALREADY_EXISTS_CODE = 6;
 
-/** Ids are interpolated into a document path; a Google user id is a URL-safe token and a
- * date is always `YYYY-MM-DD`, so anything else at this boundary is rejected rather than
- * risking a path escape into another user's document. */
-const SAFE_UID = /^[A-Za-z0-9-]+$/;
+/** Ids are interpolated into a document path; the uid must satisfy `isSafeId` and a date is
+ * always `YYYY-MM-DD`, so anything else at this boundary is rejected rather than risking a
+ * path escape into another user's document. */
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 const DigestEmailItemDocument = z.object({
@@ -57,7 +57,7 @@ export function createFirestoreDigestStore(
   const collection = firestore.collection(DIGESTS_COLLECTION);
 
   function documentId(uid: string, date: string): string | null {
-    if (!SAFE_UID.test(uid) || !DATE_KEY.test(date)) {
+    if (!isSafeId(uid) || !DATE_KEY.test(date)) {
       options.logger?.warn('digest document id rejected by shape check', {
         uidLength: uid.length,
       });
