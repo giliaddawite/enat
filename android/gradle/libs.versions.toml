@@ -31,7 +31,7 @@ robolectric = "4.14.1"
 androidxTestExtJunit = "1.2.1"
 # JVM screenshot tests on top of the Robolectric setup above (TICKET-301). 1.61+ ships
 # Kotlin 2.3 metadata, unreadable by the Kotlin 2.0 compiler pinned above — bump together.
-roborazzi = "1.60.0"
+roborazzi = "1.75.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
