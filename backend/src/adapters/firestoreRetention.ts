@@ -13,12 +13,13 @@ export function retentionExpireAt(writtenAt: Date, retentionDays: number): Times
 }
 
 /**
- * The instant a stored ISO-8601 field records, or `fallback` when the field does not parse.
- * Used to backfill `expireAt` on documents written before the field existed: their own
- * `createdAt`/`generatedAt` is the honest anchor, and a corrupt one falls back to now so
- * the document still gets a deadline rather than living forever.
+ * The instant a stored ISO-8601 field records, clamped to `now`: the field does not parse,
+ * or claims a moment in the future, and `now` is used instead. Used to backfill `expireAt`
+ * on documents written before the field existed: their own `createdAt`/`generatedAt` is
+ * the honest anchor, but a corrupt or forward-dated one must not buy a document endless
+ * retention — or a year past 9999, which `Timestamp.fromMillis` rejects outright.
  */
-export function storedInstantOr(iso: string, fallback: Date): Date {
+export function storedInstantOr(iso: string, now: Date): Date {
   const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+  return Number.isNaN(parsed.getTime()) || parsed.getTime() > now.getTime() ? now : parsed;
 }

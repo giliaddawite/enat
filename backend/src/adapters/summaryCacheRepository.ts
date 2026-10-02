@@ -84,7 +84,7 @@ export function createFirestoreSummaryCacheStore(
   return {
     async getMany(uid, messageIds) {
       const hits = new Map<string, EmailSummary>();
-      const backfills: Promise<unknown>[] = [];
+      const backfills: Promise<boolean>[] = [];
       for (let start = 0; start < messageIds.length; start += READ_CONCURRENCY) {
         const chunk = messageIds.slice(start, start + READ_CONCURRENCY);
         const snapshots = await Promise.all(
@@ -119,23 +119,14 @@ export function createFirestoreSummaryCacheStore(
           if (parsed.data.expireAt === undefined) {
             const id = documentId(uid, requestedId);
             if (id !== null) {
-              backfills.push(
-                collection.doc(id).update({
-                  expireAt: retentionExpireAt(
-                    storedInstantOr(parsed.data.createdAt, now()),
-                    SUMMARY_RETENTION_DAYS,
-                  ),
-                }),
-              );
+              backfills.push(backfillExpireAt(id, parsed.data.createdAt));
             }
           }
         });
       }
       // Backfills are tolerated failures: the hits above are already correct, and an
       // unstamped document is simply retried on the next read.
-      const failed = (await Promise.allSettled(backfills)).filter(
-        (outcome) => outcome.status === 'rejected',
-      ).length;
+      const failed = (await Promise.all(backfills)).filter((succeeded) => !succeeded).length;
       if (failed > 0) {
         options.logger?.warn('summary cache expireAt backfill failed; will retry on next read', {
           count: failed,
@@ -170,10 +161,11 @@ export function createFirestoreSummaryCacheStore(
             if (!isAlreadyExists(error)) {
               throw error;
             }
-            // Another run cached this email first; its content stands. Only the retention
-            // stamp is written, so a document that reached this path without one (written
-            // before TICKET-303, and not seen by `getMany`) cannot be left to live forever.
-            await collection.doc(id).update({ expireAt });
+            // Another run cached this email first; its content stands. Only a missing
+            // retention stamp is added — a document that reached this path without one
+            // (written before TICKET-303, and not seen by `getMany`) must not live forever,
+            // but a stamped one must not have its deadline pushed back on every run.
+            await stampIfUnstamped(id, writtenAt);
           }
         }),
       );
@@ -189,6 +181,44 @@ export function createFirestoreSummaryCacheStore(
       }
     },
   };
+
+  /**
+   * Stamps a pre-TTL document with the deadline it would have had. Resolves to whether it
+   * succeeded and never rejects: the rejection handler is attached here, at creation, because
+   * `getMany` keeps reading further chunks before it looks at these — a backfill that failed
+   * during that wait would otherwise be an unhandled rejection, which takes the process
+   * down and prints the raw Firestore error (document path, uid and message id included) to
+   * stderr. The deadline is computed inside the promise for the same reason: a throw from
+   * `Timestamp` must become a `false`, never fail the read.
+   */
+  function backfillExpireAt(id: string, createdAt: string): Promise<boolean> {
+    return Promise.resolve()
+      .then(() =>
+        collection.doc(id).update({
+          expireAt: retentionExpireAt(storedInstantOr(createdAt, now()), SUMMARY_RETENTION_DAYS),
+        }),
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+  }
+
+  /** The write-race path's backfill: anchored on the document's own `createdAt` when it is
+   * one, otherwise on this write's clock. A document deleted between the conflict and this
+   * read (TTL, an operator) has nothing left to stamp. */
+  async function stampIfUnstamped(id: string, writtenAt: Date): Promise<void> {
+    const document = collection.doc(id);
+    const snapshot = await document.get();
+    const stored = snapshot.data();
+    if (!snapshot.exists || stored === undefined || stored['expireAt'] !== undefined) {
+      return;
+    }
+    const createdAt = typeof stored['createdAt'] === 'string' ? stored['createdAt'] : '';
+    await document.update({
+      expireAt: retentionExpireAt(storedInstantOr(createdAt, writtenAt), SUMMARY_RETENTION_DAYS),
+    });
+  }
 }
 
 function isAlreadyExists(error: unknown): boolean {

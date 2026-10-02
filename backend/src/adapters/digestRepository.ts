@@ -135,6 +135,11 @@ export function createFirestoreDigestStore(
    * Stamps a pre-TTL document with the deadline it would have had, anchored on its own
    * `generatedAt`, so old digests age out on the same schedule as new ones. A failed
    * backfill is logged and tolerated — the read still succeeds, and the next read retries.
+   *
+   * Known race, accepted: a `get` that backfills can interleave with a `save` regenerating
+   * the same day, and this older `expireAt` can land after the save's newer one. The
+   * document then expires earlier than a fresh write would — never later — so the error is
+   * in the privacy-safe direction, and the read path never serves a digest that old anyway.
    */
   async function backfillExpireAt(
     document: FirestoreDocumentLike,

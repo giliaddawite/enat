@@ -119,6 +119,16 @@ describe('createFirestoreDigestStore', () => {
       });
     });
 
+    it('clamps a future generatedAt to the clock so the backfill cannot grant endless retention', async () => {
+      const { store, documents } = storeWith({
+        'digests/uid-1_2026-07-01': { ...OLD_DIGEST, generatedAt: '2031-01-01T00:00:00.000Z' },
+      });
+
+      await store.get('uid-1', '2026-07-01');
+
+      expect(documents['digests/uid-1_2026-07-01']?.['expireAt']).toEqual(EXPIRE_AT);
+    });
+
     it('anchors the backfill on the clock when generatedAt does not parse', async () => {
       const { store, documents } = storeWith({
         'digests/uid-1_2026-07-01': { ...OLD_DIGEST, generatedAt: 'not-a-date' },
