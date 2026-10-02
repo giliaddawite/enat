@@ -585,7 +585,7 @@ describe('createDigestSummarizer logging', () => {
     expect(entry(logs, 'digest batch call failed; falling back to heuristics')).toMatchObject({
       severity: 'ERROR',
       emailCount: 1,
-      errorName: 'Error',
+      error: { name: 'Error' },
     });
     expect(JSON.stringify(logs.entries)).not.toContain('quota detail');
   });
@@ -610,7 +610,7 @@ describe('createDigestSummarizer logging', () => {
     await digest.summarize(UID, emails);
 
     expect(entry(logs, 'digest batch call failed; falling back to heuristics')).toMatchObject({
-      errorName: 'string',
+      error: { name: 'NonError', type: 'string' },
     });
     expect(JSON.stringify(logs.entries)).not.toContain('leaky detail');
   });
@@ -629,7 +629,7 @@ describe('createDigestSummarizer logging', () => {
     await digest.summarize(UID, emails);
 
     expect(entry(logs, 'summary cache read failed; treating all emails as uncached')).toMatchObject(
-      { severity: 'WARNING', count: 1, errorName: 'Error' },
+      { severity: 'WARNING', count: 1, error: { name: 'Error' } },
     );
   });
 
@@ -649,7 +649,7 @@ describe('createDigestSummarizer logging', () => {
     expect(entry(logs, 'summary cache write failed; digest continues uncached')).toMatchObject({
       severity: 'WARNING',
       count: 1,
-      errorName: 'Error',
+      error: { name: 'Error' },
     });
   });
 });
