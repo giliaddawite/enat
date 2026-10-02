@@ -16,6 +16,18 @@ interface KeySet {
   readonly jwks: ReturnType<typeof createLocalJWKSet>;
   wrongKeySign(claims: Record<string, unknown>): Promise<string>;
   unknownKidSign(claims: Record<string, unknown>): Promise<string>;
+  /** A token signed with a symmetric HS256 key — the classic algorithm-confusion forgery. */
+  hmacSign(claims: Record<string, unknown>): Promise<string>;
+}
+
+/** A compact JWS with an arbitrary `alg` header and a bogus signature, for algorithms
+ * jose will not sign with (`none`, or one it does not know). */
+function forgeWithAlg(alg: string, claims: Record<string, unknown>): string {
+  const encode = (value: unknown): string =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { ...claims, iss: ISSUER, aud: AUDIENCE, iat: now, exp: now + 3600 };
+  return `${encode({ alg, kid: 'test-key' })}.${encode(payload)}.${alg === 'none' ? '' : 'c2ln'}`;
 }
 
 interface SignOptions {
@@ -67,7 +79,16 @@ async function buildKeySet(): Promise<KeySet> {
       .setAudience(AUDIENCE)
       .sign(privateKey);
 
-  return { sign, jwks, wrongKeySign, unknownKidSign };
+  const hmacSign = (claims: Record<string, unknown>): Promise<string> =>
+    new SignJWT(claims)
+      .setProtectedHeader({ alg: 'HS256', kid: 'test-key' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .sign(new TextEncoder().encode('an-attacker-chosen-shared-secret-of-32b'));
+
+  return { sign, jwks, wrongKeySign, unknownKidSign, hmacSign };
 }
 
 const VALID_CLAIMS = {
@@ -174,6 +195,29 @@ describe('createGoogleIdTokenVerifier', () => {
     expect(error).toBeInstanceOf(IdTokenRejectedError);
     expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
   });
+
+  it('rejects an HS256-signed token as a bad signature, not as a verification outage', async () => {
+    const token = await keys.hmacSign(VALID_CLAIMS);
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
+
+  it.each(['none', 'XS256'])(
+    'rejects a token whose header claims alg %j as a bad signature, not as an outage',
+    async (alg) => {
+      const error = await verifier()
+        .verify(forgeWithAlg(alg, VALID_CLAIMS))
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(IdTokenRejectedError);
+      expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+    },
+  );
 
   it('reports a key-set fetch failure as unavailable, not as a token rejection', async () => {
     const failing = createGoogleIdTokenVerifier({

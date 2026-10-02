@@ -197,7 +197,12 @@ function toRejection(error: unknown): IdTokenRejectedError | IdTokenVerification
     // A well-formed token whose `kid` names a key Google never published is a forgery
     // signal, not a JWKS problem on our side — the key set was fetched fine and simply
     // does not contain the claimed key.
-    error instanceof joseErrors.JWKSNoMatchingKey
+    error instanceof joseErrors.JWKSNoMatchingKey ||
+    // A header naming any algorithm but RS256 (`algorithms` above) — HS256, `none`, or
+    // something jose has never heard of — is the caller's forgery, not our outage: jose
+    // refuses it before even looking at the key set, so a 503 here would be wrong.
+    error instanceof joseErrors.JOSEAlgNotAllowed ||
+    error instanceof joseErrors.JOSENotSupported
   ) {
     return new IdTokenRejectedError('invalid_signature', 'ID token signature invalid', {
       cause: error,
