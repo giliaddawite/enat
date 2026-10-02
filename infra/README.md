@@ -53,6 +53,41 @@ TICKET-003 provisions the project and secrets, this configuration is unapplied a
 runtime acceptance criteria in TICKET-101 (scale to zero, cold-start latency) cannot be
 measured. See [`docs/backend-runtime.md`](../docs/backend-runtime.md).
 
+## Firestore retention policies (TICKET-303)
+
+Two collections hold data derived from the user's mail, and neither may keep it
+indefinitely (see [`docs/privacy.md`](../docs/privacy.md)):
+
+| Collection | What it holds | Retention | Written by |
+| --- | --- | --- | --- |
+| `digests` | one document per user per day: sender, subject and Amharic summary per email | 30 days | `backend/src/adapters/digestRepository.ts` |
+| `emailSummaries` | one document per user, prompt version and message: category, summary, urgency | 90 days | `backend/src/adapters/summaryCacheRepository.ts` |
+
+The repositories stamp every document with an `expireAt` timestamp at write time, computed
+from the injected clock. Firestore deletes expired documents only when a **TTL policy** on
+that field exists for the collection group, so the policy is part of provisioning the
+project — without it, `expireAt` is just a field. Enable both (once per project; the
+command is idempotent and takes a few minutes to become active):
+
+```sh
+gcloud firestore fields ttls update expireAt \
+  --collection-group=digests --enable-ttl --project PROJECT_ID
+
+gcloud firestore fields ttls update expireAt \
+  --collection-group=emailSummaries --enable-ttl --project PROJECT_ID
+
+# Verify: both should list `ttlConfig: state: ACTIVE` once provisioning completes.
+gcloud firestore fields ttls list --project PROJECT_ID
+```
+
+Add `--database=<id>` to each command if the service uses a named database rather than
+`(default)`. TTL deletion is best-effort and typically completes within 24 hours of
+`expireAt`; the read path never depends on it (`findLatestDigest` looks back days, and the
+summary cache is keyed so a missing document is simply re-summarized), so the only effect
+of a missing policy is retention, which is exactly why it must be verified, not assumed.
+Changing a retention period is a code change to the constant in the repository named
+above, not a `gcloud` change: the policy only says *which field* expires a document.
+
 ## Digest generation scheduling (TICKET-105)
 
 Cloud Scheduler publishes to a Pub/Sub topic every morning; the topic's push subscription

@@ -1,3 +1,4 @@
+import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import type { DigestStore } from '../domain/digestGeneration.js';
 import type { Digest, DigestEmailItem, DigestSection } from '../domain/digest.js';
@@ -14,6 +15,16 @@ import type { FirestoreLike } from './usersRepository.js';
  * pattern shared with `gmailSyncStateRepository` and `summaryCacheRepository`).
  */
 const DIGESTS_COLLECTION = 'digests';
+
+/**
+ * Retention (TICKET-303, docs/privacy.md). A digest carries each email's sender and
+ * subject — the app renders both — so the document is personal data and must not live
+ * forever. `expireAt` is the Firestore TTL field (infra/README.md has the policy command);
+ * the read path never serves a digest this old anyway (`findLatestDigest` looks back days,
+ * not weeks), so expiry costs nothing the user can see.
+ */
+export const DIGEST_RETENTION_DAYS = 30;
+const DIGEST_RETENTION_MS = DIGEST_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 /** The gRPC status code Firestore raises from `create()` on a conflicting document. */
 const FIRESTORE_ALREADY_EXISTS_CODE = 6;
@@ -43,9 +54,12 @@ const DigestDocument = z.object({
   sections: z.array(DigestSectionDocument),
   generatedAt: z.string().min(1),
   emailCount: z.number().int().nonnegative(),
+  expireAt: z.instanceof(Timestamp),
 });
 
 export interface DigestRepositoryOptions {
+  /** Injected clock; `expireAt` is computed from it at write time. */
+  readonly now?: () => Date;
   /** Receives a warning when a stored document is invalid; never document contents. */
   readonly logger?: Logger;
 }
@@ -54,6 +68,7 @@ export function createFirestoreDigestStore(
   firestore: FirestoreLike,
   options: DigestRepositoryOptions = {},
 ): DigestStore {
+  const now = options.now ?? (() => new Date());
   const collection = firestore.collection(DIGESTS_COLLECTION);
 
   function documentId(uid: string, date: string): string | null {
@@ -98,7 +113,7 @@ export function createFirestoreDigestStore(
         throw new Error('digest save rejected: uid or date failed the safe-id shape check');
       }
       const document = collection.doc(id);
-      const data = toDocument(digest);
+      const data = toDocument(digest, Timestamp.fromMillis(now().getTime() + DIGEST_RETENTION_MS));
       try {
         await document.create(data);
       } catch (error) {
@@ -131,12 +146,13 @@ function toDigest(document: z.infer<typeof DigestDocument>): Digest {
   };
 }
 
-function toDocument(digest: Digest): Record<string, unknown> {
+function toDocument(digest: Digest, expireAt: Timestamp): Record<string, unknown> {
   return {
     date: digest.date,
     userId: digest.userId,
     generatedAt: digest.generatedAt,
     emailCount: digest.emailCount,
+    expireAt,
     sections: digest.sections.map((section) => ({
       category: section.category,
       items: section.items.map((item) => ({

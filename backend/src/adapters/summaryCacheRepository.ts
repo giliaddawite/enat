@@ -1,3 +1,4 @@
+import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import { stripSummaryFormatControls, type SummaryCacheStore } from '../domain/digestPipeline.js';
 import { isSafeId } from '../domain/safeId.js';
@@ -13,6 +14,16 @@ import type { FirestoreLike } from './usersRepository.js';
  */
 const SUMMARY_COLLECTION = 'emailSummaries';
 
+/**
+ * Retention (TICKET-303, docs/privacy.md). A summary is derived from one email's content,
+ * so it expires too — long after the digest that showed it (30 days), because its whole
+ * purpose is to keep the same email from being billed twice: an email still in the inbox
+ * three months on is one no digest window will reach again. `expireAt` is the Firestore
+ * TTL field; infra/README.md has the policy command.
+ */
+export const SUMMARY_RETENTION_DAYS = 90;
+const SUMMARY_RETENTION_MS = SUMMARY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
 const SummaryDocument = z.object({
   messageId: z.string().min(1),
   category: z.enum(EMAIL_CATEGORIES),
@@ -22,6 +33,7 @@ const SummaryDocument = z.object({
   urgent: z.boolean(),
   promptVersion: z.string().min(1),
   createdAt: z.string().min(1),
+  expireAt: z.instanceof(Timestamp),
 });
 
 /** The gRPC status code Firestore raises from `create()` on a conflicting document. */
@@ -106,7 +118,9 @@ export function createFirestoreSummaryCacheStore(
     },
 
     async setMany(uid, summaries) {
-      const createdAt = now().toISOString();
+      const writtenAt = now();
+      const createdAt = writtenAt.toISOString();
+      const expireAt = Timestamp.fromMillis(writtenAt.getTime() + SUMMARY_RETENTION_MS);
       // Every write is attempted before any failure surfaces: one Firestore hiccup must
       // not forfeit the other already-paid-for summaries in the batch.
       const outcomes = await Promise.allSettled(
@@ -123,6 +137,7 @@ export function createFirestoreSummaryCacheStore(
               urgent: summary.urgent,
               promptVersion: summary.promptVersion,
               createdAt,
+              expireAt,
             });
           } catch (error) {
             if (!isAlreadyExists(error)) {

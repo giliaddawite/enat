@@ -1,11 +1,33 @@
+import { Timestamp } from '@google-cloud/firestore';
 import { describe, expect, it } from 'vitest';
 import type { CacheableEmailSummary } from '../domain/summary.js';
 import { createFakeFirestore } from '../testing/fakeFirestore.js';
-import { createFirestoreSummaryCacheStore } from './summaryCacheRepository.js';
+import {
+  createFirestoreSummaryCacheStore,
+  SUMMARY_RETENTION_DAYS,
+} from './summaryCacheRepository.js';
 
 const UID = 'google-user-123';
 const NOW = new Date('2026-08-25T12:00:00.000Z');
+const EXPIRE_AT = Timestamp.fromDate(new Date('2026-11-23T12:00:00.000Z'));
 const VERSION = 'digest-v1';
+
+/** A well-formed stored summary for `messageId`, as an older run would have written it. */
+function storedDocument(
+  messageId: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    messageId,
+    category: 'important',
+    summary: 'ማጠቃለያ',
+    urgent: false,
+    promptVersion: VERSION,
+    createdAt: NOW.toISOString(),
+    expireAt: EXPIRE_AT,
+    ...overrides,
+  };
+}
 
 function cacheable(messageId: string): CacheableEmailSummary {
   return {
@@ -51,6 +73,27 @@ describe('createFirestoreSummaryCacheStore', () => {
     expect(otherUser.size).toBe(0);
   });
 
+  it(`stamps every cached summary with an expireAt ${SUMMARY_RETENTION_DAYS} days out, from the injected clock`, async () => {
+    const { store, documents } = storeWith();
+
+    await store.setMany(UID, [cacheable('msg-1')]);
+
+    expect(SUMMARY_RETENTION_DAYS).toBe(90);
+    expect(documents[`emailSummaries/${UID}_${VERSION}_msg-1`]?.['expireAt']).toEqual(EXPIRE_AT);
+  });
+
+  it('treats a document written without a retention stamp as a miss, so it is re-cached with one', async () => {
+    const { store } = storeWith({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: storedDocument('msg-1', {
+        expireAt: undefined,
+      }),
+    });
+
+    const hits = await store.getMany(UID, ['msg-1']);
+
+    expect(hits.size).toBe(0);
+  });
+
   it('does not serve results cached under an older prompt version', async () => {
     const { firestore } = createFakeFirestore();
     const oldStore = createFirestoreSummaryCacheStore(firestore, { promptVersion: 'digest-v0' });
@@ -89,17 +132,9 @@ describe('createFirestoreSummaryCacheStore', () => {
   });
 
   it('treats a document whose stored messageId disagrees with its key as a miss', async () => {
-    const { firestore } = createFakeFirestore({
-      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
-        messageId: 'msg-other',
-        category: 'important',
-        summary: 'ማጠቃለያ',
-        urgent: false,
-        promptVersion: VERSION,
-        createdAt: NOW.toISOString(),
-      },
+    const { store } = storeWith({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: storedDocument('msg-other'),
     });
-    const store = createFirestoreSummaryCacheStore(firestore, { promptVersion: VERSION });
 
     const hits = await store.getMany(UID, ['msg-1']);
 
@@ -107,17 +142,11 @@ describe('createFirestoreSummaryCacheStore', () => {
   });
 
   it('strips directional format controls from summaries read back from storage', async () => {
-    const { firestore } = createFakeFirestore({
-      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
-        messageId: 'msg-1',
-        category: 'important',
+    const { store } = storeWith({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: storedDocument('msg-1', {
         summary: '‮ማጠቃለያ‬',
-        urgent: false,
-        promptVersion: VERSION,
-        createdAt: NOW.toISOString(),
-      },
+      }),
     });
-    const store = createFirestoreSummaryCacheStore(firestore, { promptVersion: VERSION });
 
     const hits = await store.getMany(UID, ['msg-1']);
 
