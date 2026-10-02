@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { GmailSyncStateStore } from '../domain/gmailSync.js';
+import { isSafeId } from '../domain/safeId.js';
 import type { Logger } from '../logging/logger.js';
 import type { FirestoreLike } from './usersRepository.js';
 
@@ -32,9 +33,19 @@ export function createFirestoreGmailSyncStateStore(
   const now = options.now ?? (() => new Date());
   const collection = firestore.collection(SYNC_STATE_COLLECTION);
 
+  /** The uid is the whole document path here, so a `/` or `..` in it would address another
+   * collection outright. The uid comes from a verified ID token or a stored user record, so
+   * failing this check is a bug — thrown loudly rather than treated as a miss. */
+  function documentFor(uid: string) {
+    if (!isSafeId(uid)) {
+      throw new Error('gmail sync state rejected: uid failed the safe-id shape check');
+    }
+    return collection.doc(uid);
+  }
+
   return {
     async getHistoryId(uid) {
-      const snapshot = await collection.doc(uid).get();
+      const snapshot = await documentFor(uid).get();
       if (!snapshot.exists) {
         return null;
       }
@@ -49,7 +60,7 @@ export function createFirestoreGmailSyncStateStore(
     },
 
     async setHistoryId(uid, historyId) {
-      const document = collection.doc(uid);
+      const document = documentFor(uid);
       const data = { historyId, updatedAt: now().toISOString() };
       try {
         await document.create(data);

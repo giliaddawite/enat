@@ -41,6 +41,17 @@ describe('createFirestoreGmailSyncStateStore', () => {
     });
   });
 
+  it('refuses a uid that could address a different document path', async () => {
+    const { firestore, documents } = createFakeFirestore();
+    const store = createFirestoreGmailSyncStateStore(firestore, { now: NOW });
+
+    await expect(store.getHistoryId('users/other')).rejects.toThrow(/safe-id shape check/);
+    await expect(store.setHistoryId('users/other', 'history-1')).rejects.toThrow(
+      /safe-id shape check/,
+    );
+    expect(Object.keys(documents)).toHaveLength(0);
+  });
+
   it('treats a corrupt document as absent so the next sync self-heals with a full sync', async () => {
     const { firestore } = createFakeFirestore({
       [`gmailSyncState/${UID}`]: { historyId: 42 },

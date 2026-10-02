@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isSafeId } from '../domain/safeId.js';
 import { newUserRecord, type User } from '../domain/user.js';
 
 export interface UsersRepository {
@@ -65,9 +66,18 @@ export function createFirestoreUsersRepository(
 ): UsersRepository {
   const users = firestore.collection(USERS_COLLECTION);
 
+  /** A Google `sub` is a decimal string, so anything outside the safe charset was not
+   * minted by Google — refuse to build a document path from it. */
+  function documentFor(uid: string) {
+    if (!isSafeId(uid)) {
+      throw new Error('users document rejected: uid failed the safe-id shape check');
+    }
+    return users.doc(uid);
+  }
+
   return {
     async findOrCreateByGoogleId(identity) {
-      const ref = users.doc(identity.googleUserId);
+      const ref = documentFor(identity.googleUserId);
       const existing = await ref.get();
       if (existing.exists) {
         return reconcileEmail(ref, parseUserDocument(existing.data()), identity.email);
@@ -90,6 +100,10 @@ export function createFirestoreUsersRepository(
     },
 
     async getById(uid) {
+      if (!isSafeId(uid)) {
+        // A lookup, not a write: no such user can exist, so answer as for any unknown uid.
+        return null;
+      }
       const snapshot = await users.doc(uid).get();
       if (!snapshot.exists) {
         return null;
@@ -98,7 +112,7 @@ export function createFirestoreUsersRepository(
     },
 
     async setRefreshTokenRef(uid, refreshTokenRef) {
-      await users.doc(uid).update({ refreshTokenRef });
+      await documentFor(uid).update({ refreshTokenRef });
     },
   };
 }
