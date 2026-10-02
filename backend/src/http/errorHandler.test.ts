@@ -6,6 +6,7 @@ import {
   type LogEntry,
   type TestServer,
 } from '../testing/httpTestServer.js';
+import { GmailNotConnectedError } from '../domain/digestGeneration.js';
 import { errorHandler } from './errorHandler.js';
 import { HttpError } from './httpError.js';
 import { notFound } from './notFound.js';
@@ -47,6 +48,17 @@ async function serve() {
   });
   app.get('/parser-style-error', () => {
     throw Object.assign(new Error('Unexpected token in JSON'), { status: 400 });
+  });
+  // A Firestore-style client error: a foreign class whose message echoes its input, with a
+  // gRPC status code attached — the shape the handler must describe without copying.
+  app.get('/foreign-with-code', () => {
+    class FirestoreError extends Error {
+      readonly code = 5;
+    }
+    throw new FirestoreError(`5 NOT_FOUND: no document to update: ${SECRET}`);
+  });
+  app.get('/own-error', () => {
+    throw new GmailNotConnectedError('uid-1');
   });
   app.use(notFound);
   app.use(errorHandler(logs.logger));
@@ -154,7 +166,7 @@ describe('errorHandler', () => {
     expect(await response.json()).toMatchObject({ error: { code: 'not_found' } });
   });
 
-  it('logs a 5xx at ERROR with the request id and the stack', async () => {
+  it('logs a 5xx at ERROR with the request id', async () => {
     const { server: running, logs } = await serve();
 
     await running.fetch('/throws');
@@ -164,9 +176,49 @@ describe('errorHandler', () => {
       severity: 'ERROR',
       requestId: 'fixed-request-id',
       status: 500,
-      error: { name: 'Error', message: SECRET },
+      error: { name: 'Error' },
+    });
+  });
+
+  it("never logs a foreign error's message or stack — only its name and code", async () => {
+    const { server: running, logs } = await serve();
+
+    await running.fetch('/foreign-with-code');
+    const entry = await logs.waitFor(isFailureLog);
+
+    expect(entry['error']).toEqual({ name: 'Error', code: 5 });
+    expect(JSON.stringify(entry)).not.toContain('hunter2');
+  });
+
+  it('describes a plain Error by name alone when it carries no code', async () => {
+    const { server: running, logs } = await serve();
+
+    await running.fetch('/throws');
+    const entry = await logs.waitFor(isFailureLog);
+
+    expect(entry['error']).toEqual({ name: 'Error' });
+  });
+
+  it('logs the message and stack of an error class this service defines', async () => {
+    const { server: running, logs } = await serve();
+
+    await running.fetch('/own-error');
+    const entry = await logs.waitFor(isFailureLog);
+
+    expect(entry).toMatchObject({
+      status: 500,
+      error: { name: 'GmailNotConnectedError', message: 'user has not connected Gmail' },
     });
     expect((entry['error'] as { stack: string }).stack).toContain('at ');
+  });
+
+  it('logs the message of a 5xx HttpError, whose message is ours by contract', async () => {
+    const { server: running, logs } = await serve();
+
+    await running.fetch('/upstream-unavailable');
+    const entry = await logs.waitFor(isFailureLog);
+
+    expect(entry['error']).toMatchObject({ name: 'HttpError', message: SECRET });
   });
 
   it('describes a non-Error rejection by shape only, never by value', async () => {

@@ -1,7 +1,41 @@
 import type { ErrorRequestHandler } from 'express';
+import { GmailApiError } from '../adapters/gmailApiClient.js';
+import {
+  IdTokenRejectedError,
+  IdTokenVerificationUnavailableError,
+} from '../adapters/idTokenVerifier.js';
+import { ConfigError } from '../config.js';
+import { GmailNotConnectedError, GmailReconnectRequiredError } from '../domain/digestGeneration.js';
+import {
+  AuthCodeExchangeUnavailableError,
+  GmailConsentRejectedError,
+} from '../domain/gmailConsent.js';
+import { VerseDatasetError } from '../domain/verse.js';
 import type { LogFields, Logger } from '../logging/logger.js';
 import type { ErrorResponse } from './apiSchemas.js';
 import { HttpError, statusText, statusToCode } from './httpError.js';
+
+/**
+ * The error classes this repository defines. Their messages are written here, under the
+ * rule that no message interpolates mail content or personal data, so they are safe to
+ * log in full. An error of any other class — a Firestore or Secret Manager client error, a
+ * gax or grpc failure, an SDK exception — is described by name and code only: upstream
+ * libraries put their own inputs in `message` (a document path, a response body), and
+ * `stack` begins with that message. Membership is by `instanceof`, never by name string,
+ * so a foreign error cannot opt in by setting `name`.
+ */
+const OWN_ERROR_CLASSES: readonly (abstract new (...args: never[]) => Error)[] = [
+  HttpError,
+  ConfigError,
+  GmailApiError,
+  IdTokenRejectedError,
+  IdTokenVerificationUnavailableError,
+  GmailNotConnectedError,
+  GmailReconnectRequiredError,
+  GmailConsentRejectedError,
+  AuthCodeExchangeUnavailableError,
+  VerseDatasetError,
+];
 
 interface ClientError {
   readonly status: number;
@@ -78,13 +112,25 @@ function declaredStatus(error: unknown): number | undefined {
 }
 
 /**
- * Thrown values that are not Errors are described by shape only: an arbitrary rejected
- * value may hold user data, and log entries must stay free of it. Error messages raised in
- * this service must likewise never interpolate email content or other personal data.
+ * Only errors this service constructs (`OWN_ERROR_CLASSES`) are logged with their message
+ * and stack. Every other Error is reduced to its name and, when present, its scalar `code`
+ * (a gRPC status number, a Node `ECONNRESET`-style string) — enough to tell a Firestore
+ * outage from a bug without copying whatever the library put in the message. Thrown values
+ * that are not Errors are described by shape only: an arbitrary rejected value may hold
+ * user data, and log entries must stay free of it.
  */
 function describeError(error: unknown): LogFields {
-  if (error instanceof Error) {
+  if (!(error instanceof Error)) {
+    return { name: 'NonError', type: typeof error };
+  }
+  if (OWN_ERROR_CLASSES.some((errorClass) => error instanceof errorClass)) {
     return { name: error.name, message: error.message, stack: error.stack };
   }
-  return { name: 'NonError', type: typeof error };
+  const code = scalarCode(error);
+  return { name: error.name, ...(code !== undefined ? { code } : {}) };
+}
+
+function scalarCode(error: Error): string | number | undefined {
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' || typeof code === 'number' ? code : undefined;
 }

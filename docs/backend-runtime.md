@@ -78,8 +78,8 @@ with any error logged for the same request. When `GCP_PROJECT_ID` is set, the
 `logging.googleapis.com/trace` field groups a request's entries under its trace.
 
 Responses in the 5xx range are logged twice by design, both carrying the request id: once
-by the error handler with the stack trace, and once by the access log with the status and
-latency.
+by the error handler with a description of the error, and once by the access log with the
+status and latency.
 
 Log entries deliberately exclude query strings, request bodies, headers, and client IP
 addresses. This service handles the contents of a personal mailbox; none of it belongs in
@@ -87,9 +87,17 @@ a log. The logged URL is Express's parsed `req.path`, truncated to 256 character
 `originalUrl`, which for a legal absolute-form request target
 (`GET http://user:password@host/path`) carries an authority and embedded credentials.
 
-One gap is known and open: the error handler logs `error.message` and `error.stack` for
-any 5xx. That is safe while the only errors come from this service and Express, but a
-dependency's error can embed its own inputs — Firestore puts the document path in the
-message, and Google API clients put the upstream response body there. Redacting `message`
-alone would achieve nothing, because `stack` begins with `Name: message`. Both must be
-handled together, before TICKET-103 puts mailbox data in the process.
+What the error handler logs for a 5xx depends on who constructed the error
+(`src/http/errorHandler.ts`, `OWN_ERROR_CLASSES`). An error of a class this repository
+defines — `HttpError`, `GmailApiError`, `IdTokenRejectedError`, the digest-generation and
+consent errors, and so on — is logged with its `message` and `stack`, because those
+messages are written here under the rule that they never interpolate mail content or
+personal data. Every other error — a Firestore or Secret Manager client error, a gax/grpc
+failure, an SDK exception, or a bare `Error` — is logged as `{ name, code }` only, where
+`code` is the scalar status the library attached (a gRPC status number, a Node
+`ECONNRESET`-style string). Those libraries put their own inputs in `message` — Firestore
+the document path, Google API clients the upstream response body — and `stack` begins with
+`Name: message`, so neither field is safe to copy. The allowlist is checked with
+`instanceof`, never by comparing `name`, so a foreign error cannot opt in by naming itself
+after one of ours. Adding an error class to this service means adding it to that list in
+the same change, or its 5xx entries will carry no message.
