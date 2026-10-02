@@ -1,3 +1,4 @@
+import { describeForeignError } from '../logging/foreignError.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -117,11 +118,8 @@ async function destroySupersededVersions(
  * error messages embed the resource name, which for these secrets contains the uid.
  */
 function logRetirementFailure(logger: Logger | undefined, error: unknown): void {
-  const name = error instanceof Error ? error.name : 'NonError';
-  const code =
-    typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
   logger?.warn('failed to destroy a superseded refresh token version', {
-    error: { name, ...(code !== undefined ? { code } : {}) },
+    error: describeForeignError(error),
   });
 }
 

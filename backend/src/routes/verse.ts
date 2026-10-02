@@ -8,6 +8,7 @@ import {
   type DailyVerseSource,
 } from '../domain/verse.js';
 import type { VerseResponse } from '../http/apiSchemas.js';
+import { describeError } from '../http/describeError.js';
 
 /**
  * `GET /v1/verse/today` (TICKET-106). Thin like the digest routes: which verse "today"
@@ -64,9 +65,11 @@ export function getVerseToday(deps: VerseRouteDependencies): RequestHandler {
     } catch (error) {
       // Never an empty card (TICKET-106): any selection failure degrades to the bundled
       // fallback verse, as a 200 — the app should not treat a bad day's lookup as an error.
+      // Rendered by the shared allowlist, not `error.message` directly: a future source
+      // backed by a library would otherwise put that library's message in the log.
       req.log?.warn('verse selection failed; serving fallback verse', {
         date,
-        reason: error instanceof Error ? error.message : 'unknown',
+        error: describeError(error),
       });
       const verse: DailyVerse = { date, ...FALLBACK_VERSE };
       respondWithVerse(req, res, verse, computeVerseETag(verse), CACHEABLE_WHILE_DEGRADED);

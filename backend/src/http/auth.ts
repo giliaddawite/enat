@@ -6,6 +6,7 @@ import {
 } from '../adapters/idTokenVerifier.js';
 import type { UsersRepository } from '../adapters/usersRepository.js';
 import type { User } from '../domain/user.js';
+import { describeError } from './describeError.js';
 import { HttpError } from './httpError.js';
 
 export interface AuthenticateDependencies {
@@ -50,8 +51,11 @@ export function authenticate({
         }
         if (error instanceof IdTokenVerificationUnavailableError) {
           // The cause (JWKS fetch failure etc.) is logged here because the error handler
-          // only describes the top-level error, and this one exists to wrap another.
-          req.log?.error('id token verification unavailable', { error: describeCause(error) });
+          // only describes the top-level error, and this one exists to wrap another. Same
+          // allowlist as the handler: a jose or fetch error is foreign, so name and code only.
+          req.log?.error('id token verification unavailable', {
+            error: describeError(error.cause),
+          });
           next(new HttpError(503));
           return;
         }
@@ -75,14 +79,6 @@ async function resolveUser(
     throw new IdTokenRejectedError('unverified_email', 'ID token email is not verified');
   }
   return usersRepository.findOrCreateByGoogleId(verified);
-}
-
-function describeCause(error: Error): Record<string, unknown> {
-  const { cause } = error;
-  if (cause instanceof Error) {
-    return { name: cause.name, message: cause.message };
-  }
-  return { name: 'NonError', type: typeof cause };
 }
 
 function extractBearerToken(header: string | undefined): string {

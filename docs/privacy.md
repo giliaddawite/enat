@@ -82,8 +82,10 @@ never appear, and tests enforce the ones that can be tested:
 - the user's email address
 - any token: ID tokens, access tokens, refresh tokens, auth codes, `refreshTokenRef`
 - request bodies, query strings, headers, client IP addresses (`requestLogging.ts`)
-- the message or stack of an error raised by a library (`errorHandler.ts` logs those as
-  `{ name, code }` only — see `docs/backend-runtime.md#logging`)
+- the message or stack of an error raised by a library (`http/describeError.ts` renders
+  every logged error, in the error handler and at every catch site that logs, as
+  `{ name, code }` unless the class is one this repository defines — see
+  `docs/backend-runtime.md#logging`)
 
 If a new log line needs something not on the permitted list, the answer is a count or a
 hash, not an exception to the list.

@@ -283,12 +283,16 @@ describe('authenticate', () => {
     });
   });
 
-  it('logs the cause of a verification outage without exposing it to the client', async () => {
+  it('logs the cause of a verification outage by name and code, never its message', async () => {
     const unavailableVerifier: IdTokenVerifier = {
       verify: () =>
         Promise.reject(
           new IdTokenVerificationUnavailableError('ID token verification unavailable', {
-            cause: new Error('getaddrinfo ENOTFOUND www.googleapis.com'),
+            // A fetch/DNS failure is a foreign error: its message is the library's, and a
+            // library message can carry request material. Only the errno-style code is kept.
+            cause: Object.assign(new Error('getaddrinfo ENOTFOUND jwks.internal.example'), {
+              code: 'ENOTFOUND',
+            }),
           }),
         ),
     };
@@ -302,10 +306,8 @@ describe('authenticate', () => {
     );
 
     expect(body).not.toContain('ENOTFOUND');
-    expect(entry).toMatchObject({
-      severity: 'ERROR',
-      error: { name: 'Error', message: 'getaddrinfo ENOTFOUND www.googleapis.com' },
-    });
+    expect(entry).toMatchObject({ severity: 'ERROR', error: { name: 'Error', code: 'ENOTFOUND' } });
+    expect(JSON.stringify(entry)).not.toContain('jwks.internal.example');
   });
 
   it('reports a users-repository failure as a 500, not a 401', async () => {

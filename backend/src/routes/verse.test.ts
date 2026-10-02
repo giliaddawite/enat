@@ -181,7 +181,7 @@ describe('GET /v1/verse/today', () => {
     expect(response.headers.get('cache-control')).toBe('public, max-age=300');
   });
 
-  it('logs the fallback without leaking verse content beyond the failure reason', async () => {
+  it('logs the fallback with the failure reason when the error is one of ours', async () => {
     const { server: running, logs } = await serve(failingSource);
 
     await running.fetch('/v1/verse/today', AUTH);
@@ -190,6 +190,27 @@ describe('GET /v1/verse/today', () => {
     );
 
     expect(entry.severity).toBe('WARNING');
-    expect(entry['reason']).toContain('injected failure');
+    expect(entry['error']).toMatchObject({
+      name: 'VerseDatasetError',
+      message: expect.stringContaining('injected failure') as unknown,
+    });
+  });
+
+  it("never logs a foreign error's message — a future library-backed source stays private", async () => {
+    const foreignFailure: DailyVerseSource = {
+      verseFor: () => {
+        throw new Error('upstream said: secret-source-detail');
+      },
+    };
+    const { server: running, logs } = await serve(foreignFailure);
+
+    const response = await running.fetch('/v1/verse/today', AUTH);
+    const entry = await logs.waitFor((candidate) =>
+      candidate.message.includes('serving fallback verse'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(entry['error']).toEqual({ name: 'Error' });
+    expect(JSON.stringify(entry)).not.toContain('secret-source-detail');
   });
 });

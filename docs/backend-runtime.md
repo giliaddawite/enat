@@ -87,17 +87,21 @@ a log. The logged URL is Express's parsed `req.path`, truncated to 256 character
 `originalUrl`, which for a legal absolute-form request target
 (`GET http://user:password@host/path`) carries an authority and embedded credentials.
 
-What the error handler logs for a 5xx depends on who constructed the error
-(`src/http/errorHandler.ts`, `OWN_ERROR_CLASSES`). An error of a class this repository
+What a log entry says about an error depends on who constructed it
+(`src/http/describeError.ts`, `OWN_ERROR_CLASSES` — used by the error handler and by every
+site that logs an error it caught itself, such as `auth.ts` and `routes/verse.ts`, so no
+route can bypass the rule by reaching for `error.message`). An error of a class this repository
 defines — `HttpError`, `GmailApiError`, `IdTokenRejectedError`, the digest-generation and
 consent errors, and so on — is logged with its `message` and `stack`, because those
 messages are written here under the rule that they never interpolate mail content or
 personal data. Every other error — a Firestore or Secret Manager client error, a gax/grpc
 failure, an SDK exception, or a bare `Error` — is logged as `{ name, code }` only, where
 `code` is the scalar status the library attached (a gRPC status number, a Node
-`ECONNRESET`-style string). Those libraries put their own inputs in `message` — Firestore
-the document path, Google API clients the upstream response body — and `stack` begins with
-`Name: message`, so neither field is safe to copy. The allowlist is checked with
+`ECONNRESET`-style string), and even those two are kept only when they look like
+identifiers (`/^[A-Za-z0-9_.-]{1,64}$/`), otherwise `Unknown` — `src/logging/foreignError.ts`.
+Those libraries put their own inputs in `message` — Firestore the document path, Google API
+clients the upstream response body — and `stack` begins with `Name: message`, so neither
+field is safe to copy. The allowlist is checked with
 `instanceof`, never by comparing `name`, so a foreign error cannot opt in by naming itself
 after one of ours. Adding an error class to this service means adding it to that list in
 the same change, or its 5xx entries will carry no message.
