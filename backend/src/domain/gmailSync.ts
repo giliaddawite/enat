@@ -23,8 +23,7 @@ export interface HistoryPage {
 /** `expired` means Gmail no longer holds history back to the requested id (it keeps about
  * a week); the only correct response is a fresh full sync. */
 export type HistoryResult =
-  | { readonly kind: 'page'; readonly page: HistoryPage }
-  | { readonly kind: 'expired' };
+  { readonly kind: 'page'; readonly page: HistoryPage } | { readonly kind: 'expired' };
 
 export interface MessageBodyParts {
   readonly id: string;
@@ -196,7 +195,10 @@ export function createGmailSyncService(dependencies: GmailSyncDependencies): Gma
       for (const batch of chunk(uniqueIds, GMAIL_BATCH_LIMIT)) {
         const results = await mailbox.getMessageBodies(batch);
         for (const message of results) {
-          bodies.set(message.id, truncateToTokenBudget(pickBodyText(message.parts), maxTokensPerBody));
+          bodies.set(
+            message.id,
+            truncateToTokenBudget(pickBodyText(message.parts), maxTokensPerBody),
+          );
         }
       }
       return bodies;

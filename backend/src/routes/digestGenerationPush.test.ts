@@ -43,7 +43,9 @@ function pushEnvelope(payload: unknown): unknown {
   };
 }
 
-function fakeGeneration(behavior: () => Promise<{ digest: Digest; persisted: boolean }>): DigestGenerationService {
+function fakeGeneration(
+  behavior: () => Promise<{ digest: Digest; persisted: boolean }>,
+): DigestGenerationService {
   return { generate: behavior };
 }
 

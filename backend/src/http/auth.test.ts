@@ -91,7 +91,9 @@ async function serve(idTokenVerifier: IdTokenVerifier, usersRepository: UsersRep
 }
 
 const isRejectionLog = (entry: LogEntry): boolean => entry.message === 'rejected id token';
-const authHeader = (token: string): Record<string, string> => ({ Authorization: `Bearer ${token}` });
+const authHeader = (token: string): Record<string, string> => ({
+  Authorization: `Bearer ${token}`,
+});
 
 describe('authenticate', () => {
   it('resolves a valid token to the internal user and lets the request through', async () => {
@@ -192,7 +194,9 @@ describe('authenticate', () => {
       fixedUsersRepository(),
     );
 
-    const body = await (await running.fetch('/protected', { headers: authHeader(VALID_TOKEN) })).text();
+    const body = await (
+      await running.fetch('/protected', { headers: authHeader(VALID_TOKEN) })
+    ).text();
 
     expect(body).not.toContain('wrong_audience');
     expect(body).not.toContain('at ');

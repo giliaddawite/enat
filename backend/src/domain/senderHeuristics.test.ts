@@ -45,9 +45,7 @@ describe('categorizeByHeuristics', () => {
   });
 
   it('buckets billing machinery localparts under bills regardless of domain', () => {
-    expect(categorizeByHeuristics(emailFrom('billing@some-clinic.example'))).toBe(
-      'bills_accounts',
-    );
+    expect(categorizeByHeuristics(emailFrom('billing@some-clinic.example'))).toBe('bills_accounts');
     expect(categorizeByHeuristics(emailFrom('invoices-noreply@lab.example'))).toBe(
       'bills_accounts',
     );

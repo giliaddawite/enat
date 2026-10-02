@@ -118,7 +118,8 @@ async function destroySupersededVersions(
  */
 function logRetirementFailure(logger: Logger | undefined, error: unknown): void {
   const name = error instanceof Error ? error.name : 'NonError';
-  const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
+  const code =
+    typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
   logger?.warn('failed to destroy a superseded refresh token version', {
     error: { name, ...(code !== undefined ? { code } : {}) },
   });

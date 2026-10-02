@@ -72,7 +72,10 @@ describe('createFirestoreSummaryCacheStore', () => {
       child: () => logger,
     };
     const { firestore } = createFakeFirestore({
-      [`emailSummaries/${UID}_${VERSION}_msg-1`]: { messageId: 'msg-1', category: 'not-a-category' },
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
+        messageId: 'msg-1',
+        category: 'not-a-category',
+      },
     });
     const store = createFirestoreSummaryCacheStore(firestore, {
       promptVersion: VERSION,
@@ -158,8 +161,7 @@ describe('createFirestoreSummaryCacheStore', () => {
           return id.endsWith('msg-bad')
             ? {
                 ...real,
-                create: () =>
-                  Promise.reject(Object.assign(new Error('UNAVAILABLE'), { code: 14 })),
+                create: () => Promise.reject(Object.assign(new Error('UNAVAILABLE'), { code: 14 })),
               }
             : real;
         },
@@ -167,9 +169,9 @@ describe('createFirestoreSummaryCacheStore', () => {
     };
     const store = createFirestoreSummaryCacheStore(failing, { promptVersion: VERSION });
 
-    await expect(
-      store.setMany(UID, [cacheable('msg-bad'), cacheable('msg-good')]),
-    ).rejects.toThrow('UNAVAILABLE');
+    await expect(store.setMany(UID, [cacheable('msg-bad'), cacheable('msg-good')])).rejects.toThrow(
+      'UNAVAILABLE',
+    );
     expect(documents[`emailSummaries/${UID}_${VERSION}_msg-good`]).toBeDefined();
   });
 });

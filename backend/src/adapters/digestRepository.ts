@@ -117,21 +117,17 @@ function toDigest(document: z.infer<typeof DigestDocument>): Digest {
     userId: document.userId,
     generatedAt: document.generatedAt,
     emailCount: document.emailCount,
-    sections: document.sections.map(
-      (section): DigestSection => ({
-        category: section.category,
-        items: section.items.map(
-          (item): DigestEmailItem => ({
-            messageId: item.messageId,
-            from: item.from,
-            subject: item.subject,
-            summary: item.summary,
-            urgent: item.urgent,
-            receivedAt: item.receivedAt,
-          }),
-        ),
-      }),
-    ),
+    sections: document.sections.map((section): DigestSection => ({
+      category: section.category,
+      items: section.items.map((item): DigestEmailItem => ({
+        messageId: item.messageId,
+        from: item.from,
+        subject: item.subject,
+        summary: item.summary,
+        urgent: item.urgent,
+        receivedAt: item.receivedAt,
+      })),
+    })),
   };
 }
 

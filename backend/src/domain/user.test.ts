@@ -5,7 +5,9 @@ describe('newUserRecord', () => {
   it('builds a new record from a Google identity using the injected clock', () => {
     const now = () => new Date('2026-08-17T12:00:00.000Z');
 
-    expect(newUserRecord({ googleUserId: 'google-user-123', email: 'mom@example.com' }, now)).toEqual({
+    expect(
+      newUserRecord({ googleUserId: 'google-user-123', email: 'mom@example.com' }, now),
+    ).toEqual({
       uid: 'google-user-123',
       email: 'mom@example.com',
       createdAt: '2026-08-17T12:00:00.000Z',

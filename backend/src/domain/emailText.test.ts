@@ -61,9 +61,7 @@ describe('decodeHtmlEntities', () => {
   });
 
   it('passes unknown entities through unchanged', () => {
-    expect(decodeHtmlEntities('&notarealentity; &#xfffffff;')).toBe(
-      '&notarealentity; &#xfffffff;',
-    );
+    expect(decodeHtmlEntities('&notarealentity; &#xfffffff;')).toBe('&notarealentity; &#xfffffff;');
   });
 });
 

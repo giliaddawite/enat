@@ -35,7 +35,7 @@ jobs:
     uses: ./.github/workflows/secrets-scan.yml
 
   backend:
-    name: backend (lint, typecheck, test)
+    name: backend (lint, format, typecheck, test)
     needs: detect
     if: needs.detect.outputs.backend == 'true'
     runs-on: ubuntu-latest
@@ -51,6 +51,9 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      # TICKET-305: formatting drift fails the PR here, inside the job the
+      # required-checks gate already watches.
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm run test:coverage
 

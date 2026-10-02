@@ -112,10 +112,16 @@ describe('createClaudeSummarizer', () => {
 
   it('propagates API errors to the pipeline without retrying non-retryable statuses', async () => {
     const { impl, requests } = fakeFetch([
-      new Response(JSON.stringify({ type: 'error', error: { type: 'invalid_request_error', message: 'bad request' } }), {
-        status: 400,
-        headers: { 'content-type': 'application/json' },
-      }),
+      new Response(
+        JSON.stringify({
+          type: 'error',
+          error: { type: 'invalid_request_error', message: 'bad request' },
+        }),
+        {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
     ]);
     const summarizer = createClaudeSummarizer({ apiKey: 'test-key', fetch: impl, maxRetries: 0 });
 

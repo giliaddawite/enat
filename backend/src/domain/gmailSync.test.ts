@@ -72,9 +72,7 @@ function fakeMailbox(options: FakeMailboxOptions = {}) {
     },
     getMessageBodies(ids) {
       calls.push(`bodies:${ids.length}`);
-      return Promise.resolve(
-        ids.map((id) => ({ id, parts: options.bodies?.[id] ?? [] })),
-      );
+      return Promise.resolve(ids.map((id) => ({ id, parts: options.bodies?.[id] ?? [] })));
     },
   };
 

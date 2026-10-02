@@ -21,7 +21,9 @@ afterEach(async () => {
 
 const INVOKER_EMAIL = 'enat-scheduler@enat-staging.iam.gserviceaccount.com';
 
-function scriptedVerifier(outcome: 'ok' | 'wrong-email' | 'rejected' | 'unavailable'): IdTokenVerifier {
+function scriptedVerifier(
+  outcome: 'ok' | 'wrong-email' | 'rejected' | 'unavailable',
+): IdTokenVerifier {
   return {
     verify() {
       switch (outcome) {

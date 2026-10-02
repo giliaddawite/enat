@@ -47,6 +47,7 @@ Run commands from the package directory (`/android` or `/backend`), not the repo
 | Run a single test | `npm test -- <file>` | `./gradlew testDebugUnitTest --tests "<pattern>"` |
 | Lint | `npm run lint` | `./gradlew ktlintCheck` |
 | Format | `npm run format` | `./gradlew ktlintFormat` |
+| Format check (CI gate) | `npm run format:check` | `./gradlew ktlintCheck` (same as Lint) |
 | Type check | `npm run typecheck` | (Kotlin compiler — `./gradlew compileDebugKotlin`) |
 | Build for production | `npm run build` | `./gradlew bundleRelease` |
 | UI tests | — | `./gradlew connectedDebugAndroidTest` |
@@ -163,8 +164,8 @@ iterating; run the full suite once before declaring work done.
 - **One logical change per commit.** Refactoring and behavior change go in separate commits.
 - **Pull requests stay small enough to actually review.** One ticket per PR unless tickets are
   trivially coupled.
-- **Green before merge.** ktlint, ESLint, types, tests, and gitleaks all pass in CI. A failing
-  test blocks merge — no exceptions, no "fix it after".
+- **Green before merge.** ktlint, ESLint, Prettier, types, tests, and gitleaks all pass in CI. A
+  failing test blocks merge — no exceptions, no "fix it after".
 
 ---
 
