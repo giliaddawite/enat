@@ -73,6 +73,22 @@ const GCP_PROJECT_ID = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 
 const INTEGER = /^\d+$/;
 
+/**
+ * Environment variables the Google SDKs honour that must never be set in production.
+ * `GOOGLE_SDK_NODE_LOGGING` turns on google-gax request/response logging, which prints
+ * Secret Manager payloads — the Gmail refresh token — to stderr and so into Cloud Logging;
+ * `GRPC_TRACE` does the same one layer down; `FIRESTORE_EMULATOR_HOST` redirects every
+ * Firestore read and write, unauthenticated, to whatever host it names. Each is a one-line
+ * config change away from a leak, so boot refuses them — the same closure the Anthropic
+ * client gets in code by pinning `baseURL` and `logLevel`. Allowed outside production:
+ * tests and local development run against the emulator.
+ */
+const FORBIDDEN_IN_PRODUCTION = [
+  'GOOGLE_SDK_NODE_LOGGING',
+  'FIRESTORE_EMULATOR_HOST',
+  'GRPC_TRACE',
+] as const;
+
 const DEFAULT_PORT = 8080;
 const DEFAULT_ENVIRONMENT: Environment = 'development';
 const DEFAULT_LOG_LEVEL: LogLevel = 'info';
@@ -110,6 +126,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const googleOAuthAudience = parseAudience(env.GOOGLE_OAUTH_AUDIENCE, problems);
   if (environment === 'production' && googleOAuthAudience === undefined) {
     problems.push('GOOGLE_OAUTH_AUDIENCE is required when NODE_ENV=production');
+  }
+
+  if (environment === 'production') {
+    // Name only, never the value: the value may be a host or a logging selector, and this
+    // message lands in Cloud Logging.
+    for (const name of FORBIDDEN_IN_PRODUCTION) {
+      if (env[name] !== undefined) {
+        problems.push(`${name} must not be set when NODE_ENV=production`);
+      }
+    }
   }
 
   const rateLimitPerMinute = parsePositiveInteger(

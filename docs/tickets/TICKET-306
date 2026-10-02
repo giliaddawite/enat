@@ -1,0 +1,40 @@
+TICKET-306: Backend request-budget and push-path hardening follow-ups
+
+Priority: P1 · Estimate: 2 pts · Depends on: 303
+Found during TICKET-303's security review and deliberately left out of it: each is a
+real gap, none is a data exposure, and together they are a ticket of their own rather than
+a rider on a privacy pass.
+
+Why
+
+- **The rate limiter is per process, not per user.** `createRateLimiter` keeps its window in
+  instance memory, and `service.staging.yaml` allows `maxScale: 3`. A client that spreads
+  requests across instances gets up to 3 × 60 = 180 req/min, so the documented 60 req/min
+  that "protects the Claude API budget" is not what the deployed system enforces.
+- **`POST /v1/digest/generate` shares the read budget and has no in-flight guard.** It is
+  billed in Gmail and Claude calls, yet it draws from the same 60/min bucket as `GET
+  /v1/digest`, and two concurrent generates for the same uid (pull-to-refresh twice, or the
+  app and the scheduler colliding) run the pipeline twice; the summary cache's
+  create-not-update makes the second write cheap, but the second Claude call is still paid.
+- **`express.json()` parses the push body before `verifyPubSubPush` runs.** The body is
+  bounded by Express's default 100kb limit, but any caller can make the service parse JSON
+  before its token is checked. Verification should run first; parsing should run only for
+  an authenticated push.
+- **The Pub/Sub verifier builds its own JWKS.** `pubSubPushDependencies` in `index.ts` calls
+  `createGoogleIdTokenVerifier` without the shared `googleJwks`, so the process keeps two
+  caches of the same Google key set and fetches it twice.
+
+Acceptance criteria
+
+- Rate limiting is enforced per user across instances (Firestore-backed window, or
+  `maxScale: 1` documented as the deliberate choice with the per-process limiter), and a
+  test or doc note states which; the 60 req/min figure in CLAUDE.md matches the deployed
+  behavior
+- `POST /v1/digest/generate` has its own, smaller per-user budget (e.g. 2/min) and a
+  per-uid in-flight guard so a concurrent second call either waits for or reuses the
+  first result; a test proves two concurrent generates make one pipeline run
+- `/internal/digest-generate` runs `verifyPubSubPush` before any body parsing, with an
+  explicit small `limit` on `express.json()`; a test shows an unauthenticated request is
+  rejected without the body being read
+- The push verifier receives the shared `googleJwks` from the composition root
+- `npm run lint`, `npm run format:check`, `npm run typecheck`, `npm run test:coverage` pass

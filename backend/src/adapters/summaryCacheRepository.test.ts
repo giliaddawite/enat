@@ -1,11 +1,34 @@
-import { describe, expect, it } from 'vitest';
+import { Timestamp } from '@google-cloud/firestore';
+import { describe, expect, it, vi } from 'vitest';
 import type { CacheableEmailSummary } from '../domain/summary.js';
 import { createFakeFirestore } from '../testing/fakeFirestore.js';
-import { createFirestoreSummaryCacheStore } from './summaryCacheRepository.js';
+import { captureLogs } from '../testing/httpTestServer.js';
+import {
+  createFirestoreSummaryCacheStore,
+  SUMMARY_RETENTION_DAYS,
+} from './summaryCacheRepository.js';
 
 const UID = 'google-user-123';
 const NOW = new Date('2026-08-25T12:00:00.000Z');
+const EXPIRE_AT = Timestamp.fromDate(new Date('2026-11-23T12:00:00.000Z'));
 const VERSION = 'digest-v1';
+
+/** A well-formed stored summary for `messageId`, as an older run would have written it. */
+function storedDocument(
+  messageId: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    messageId,
+    category: 'important',
+    summary: 'ማጠቃለያ',
+    urgent: false,
+    promptVersion: VERSION,
+    createdAt: NOW.toISOString(),
+    expireAt: EXPIRE_AT,
+    ...overrides,
+  };
+}
 
 function cacheable(messageId: string): CacheableEmailSummary {
   return {
@@ -51,6 +74,197 @@ describe('createFirestoreSummaryCacheStore', () => {
     expect(otherUser.size).toBe(0);
   });
 
+  it(`stamps every cached summary with an expireAt ${SUMMARY_RETENTION_DAYS} days out, from the injected clock`, async () => {
+    const { store, documents } = storeWith();
+
+    await store.setMany(UID, [cacheable('msg-1')]);
+
+    expect(SUMMARY_RETENTION_DAYS).toBe(90);
+    expect(documents[`emailSummaries/${UID}_${VERSION}_msg-1`]?.['expireAt']).toEqual(EXPIRE_AT);
+  });
+
+  describe('documents written before expireAt existed', () => {
+    const OLD_CREATED_AT = '2026-06-01T09:00:00.000Z';
+    const OLD_KEY = `emailSummaries/${UID}_${VERSION}_msg-old`;
+
+    function oldDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      const withoutStamp = storedDocument('msg-old', { createdAt: OLD_CREATED_AT });
+      delete withoutStamp['expireAt'];
+      return { ...withoutStamp, ...overrides };
+    }
+
+    it('serves the cached summary as a hit rather than re-summarizing', async () => {
+      const { store } = storeWith({ [OLD_KEY]: oldDocument() });
+
+      const hits = await store.getMany(UID, ['msg-old']);
+
+      expect(hits.get('msg-old')).toMatchObject({ summary: 'ማጠቃለያ', source: 'cache' });
+    });
+
+    it('backfills expireAt from the stored createdAt on first read', async () => {
+      const { store, documents } = storeWith({ [OLD_KEY]: oldDocument() });
+
+      await store.getMany(UID, ['msg-old']);
+
+      expect(documents[OLD_KEY]).toEqual({
+        ...oldDocument(),
+        expireAt: Timestamp.fromDate(new Date('2026-08-30T09:00:00.000Z')),
+      });
+    });
+
+    it('anchors the backfill on the clock when createdAt does not parse', async () => {
+      const { store, documents } = storeWith({ [OLD_KEY]: oldDocument({ createdAt: 'garbage' }) });
+
+      await store.getMany(UID, ['msg-old']);
+
+      expect(documents[OLD_KEY]?.['expireAt']).toEqual(EXPIRE_AT);
+    });
+
+    it('still returns the hit when the backfill write fails, and logs a count', async () => {
+      const { firestore } = createFakeFirestore({ [OLD_KEY]: oldDocument() });
+      const readOnly = {
+        collection: (name: string) => ({
+          doc: (id: string) => ({
+            ...firestore.collection(name).doc(id),
+            update: () => Promise.reject(Object.assign(new Error('UNAVAILABLE'), { code: 14 })),
+          }),
+        }),
+      };
+      const { logger, entries } = captureLogs();
+      const store = createFirestoreSummaryCacheStore(readOnly, {
+        promptVersion: VERSION,
+        now: () => NOW,
+        logger,
+      });
+
+      const hits = await store.getMany(UID, ['msg-old']);
+
+      expect(hits.size).toBe(1);
+      expect(
+        entries.some((entry) => entry.message.includes('backfill failed') && entry['count'] === 1),
+      ).toBe(true);
+    });
+
+    it('stamps an unstamped document that wins the write race, anchored on its own createdAt', async () => {
+      const { store, documents } = storeWith({ [OLD_KEY]: oldDocument() });
+
+      await store.setMany(UID, [{ ...cacheable('msg-old'), summary: 'ሌላ ማጠቃለያ' }]);
+
+      expect(documents[OLD_KEY]).toEqual({
+        ...oldDocument(),
+        expireAt: Timestamp.fromDate(new Date('2026-08-30T09:00:00.000Z')),
+      });
+    });
+
+    it('leaves an already-stamped document alone when it wins the write race', async () => {
+      const earlierStamp = Timestamp.fromDate(new Date('2026-09-01T00:00:00.000Z'));
+      const { store, documents } = storeWith({
+        [OLD_KEY]: oldDocument({ expireAt: earlierStamp }),
+      });
+
+      await store.setMany(UID, [cacheable('msg-old')]);
+
+      expect(documents[OLD_KEY]?.['expireAt']).toEqual(earlierStamp);
+    });
+
+    it('stamps a corrupt old document that wins the write race, so it still ages out', async () => {
+      const { store, documents } = storeWith({
+        [OLD_KEY]: { messageId: 'msg-old', category: 'not-a-category', createdAt: OLD_CREATED_AT },
+      });
+
+      await store.setMany(UID, [cacheable('msg-old')]);
+
+      expect(documents[OLD_KEY]?.['expireAt']).toEqual(
+        Timestamp.fromDate(new Date('2026-08-30T09:00:00.000Z')),
+      );
+    });
+
+    it('clamps a future createdAt to the clock so the backfill cannot grant endless retention', async () => {
+      const { store, documents } = storeWith({
+        [OLD_KEY]: oldDocument({ createdAt: '2031-01-01T00:00:00.000Z' }),
+      });
+
+      await store.getMany(UID, ['msg-old']);
+
+      expect(documents[OLD_KEY]?.['expireAt']).toEqual(EXPIRE_AT);
+    });
+
+    it('still returns the hit when computing the deadline throws, counting it as a failed backfill', async () => {
+      const { firestore } = createFakeFirestore({
+        [OLD_KEY]: oldDocument({ createdAt: 'garbage' }),
+      });
+      const { logger, entries } = captureLogs();
+      // An invalid clock makes Timestamp.fromMillis throw a RangeError synchronously.
+      const store = createFirestoreSummaryCacheStore(firestore, {
+        promptVersion: VERSION,
+        now: () => new Date(Number.NaN),
+        logger,
+      });
+
+      const hits = await store.getMany(UID, ['msg-old']);
+
+      expect(hits.size).toBe(1);
+      expect(
+        entries.some((entry) => entry.message.includes('backfill failed') && entry['count'] === 1),
+      ).toBe(true);
+    });
+
+    it('never leaves a backfill rejection unhandled while later chunks are still being read', async () => {
+      // 101 ids: the old document is in chunk 1, and chunk 2 (the 101st id) is still being
+      // read when chunk 1's backfill rejects. Before the fix that rejection had no handler
+      // yet, which Node reports as an unhandled rejection and exits on.
+      const ids = ['msg-old', ...Array.from({ length: 100 }, (_, index) => `msg-${index}`)];
+      const { firestore } = createFakeFirestore({ [OLD_KEY]: oldDocument() });
+      const laggy = {
+        collection: (name: string) => ({
+          doc: (id: string) => {
+            const real = firestore.collection(name).doc(id);
+            if (id.endsWith('_msg-old')) {
+              return {
+                ...real,
+                update: () =>
+                  new Promise<never>((_, reject) => {
+                    setImmediate(() =>
+                      reject(Object.assign(new Error('UNAVAILABLE'), { code: 14 })),
+                    );
+                  }),
+              };
+            }
+            if (id.endsWith('_msg-99')) {
+              return {
+                ...real,
+                get: () =>
+                  new Promise<Awaited<ReturnType<typeof real.get>>>((resolve) => {
+                    setImmediate(() => setImmediate(() => void real.get().then(resolve)));
+                  }),
+              };
+            }
+            return real;
+          },
+        }),
+      };
+      const unhandled = vi.fn();
+      process.on('unhandledRejection', unhandled);
+      const { logger, entries } = captureLogs();
+      const store = createFirestoreSummaryCacheStore(laggy, {
+        promptVersion: VERSION,
+        now: () => NOW,
+        logger,
+      });
+
+      try {
+        const hits = await store.getMany(UID, ids);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(hits.size).toBe(1);
+        expect(unhandled).not.toHaveBeenCalled();
+        expect(entries.some((entry) => entry.message.includes('backfill failed'))).toBe(true);
+      } finally {
+        process.off('unhandledRejection', unhandled);
+      }
+    });
+  });
+
   it('does not serve results cached under an older prompt version', async () => {
     const { firestore } = createFakeFirestore();
     const oldStore = createFirestoreSummaryCacheStore(firestore, { promptVersion: 'digest-v0' });
@@ -89,17 +303,9 @@ describe('createFirestoreSummaryCacheStore', () => {
   });
 
   it('treats a document whose stored messageId disagrees with its key as a miss', async () => {
-    const { firestore } = createFakeFirestore({
-      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
-        messageId: 'msg-other',
-        category: 'important',
-        summary: 'ማጠቃለያ',
-        urgent: false,
-        promptVersion: VERSION,
-        createdAt: NOW.toISOString(),
-      },
+    const { store } = storeWith({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: storedDocument('msg-other'),
     });
-    const store = createFirestoreSummaryCacheStore(firestore, { promptVersion: VERSION });
 
     const hits = await store.getMany(UID, ['msg-1']);
 
@@ -107,17 +313,11 @@ describe('createFirestoreSummaryCacheStore', () => {
   });
 
   it('strips directional format controls from summaries read back from storage', async () => {
-    const { firestore } = createFakeFirestore({
-      [`emailSummaries/${UID}_${VERSION}_msg-1`]: {
-        messageId: 'msg-1',
-        category: 'important',
+    const { store } = storeWith({
+      [`emailSummaries/${UID}_${VERSION}_msg-1`]: storedDocument('msg-1', {
         summary: '‮ማጠቃለያ‬',
-        urgent: false,
-        promptVersion: VERSION,
-        createdAt: NOW.toISOString(),
-      },
+      }),
     });
-    const store = createFirestoreSummaryCacheStore(firestore, { promptVersion: VERSION });
 
     const hits = await store.getMany(UID, ['msg-1']);
 

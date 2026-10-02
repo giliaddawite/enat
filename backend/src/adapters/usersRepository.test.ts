@@ -207,6 +207,20 @@ describe('createFirestoreUsersRepository', () => {
     ).rejects.toThrow();
   });
 
+  it('refuses a Google user id that could address a different document path', async () => {
+    const { firestore, documents } = fakeFirestore();
+    const repository = createFirestoreUsersRepository(firestore, NOW);
+
+    await expect(
+      repository.findOrCreateByGoogleId({ ...IDENTITY, googleUserId: 'digests/uid-1' }),
+    ).rejects.toThrow(/safe-id shape check/);
+    await expect(
+      repository.setRefreshTokenRef('digests/uid-1', 'projects/enat/secrets/x/versions/1'),
+    ).rejects.toThrow(/safe-id shape check/);
+    await expect(repository.getById('digests/uid-1')).resolves.toBeNull();
+    expect(Object.keys(documents)).toHaveLength(0);
+  });
+
   it('never includes stored field values in a schema-validation error message', async () => {
     const { firestore } = fakeFirestore({
       'users/google-user-123': { uid: 'google-user-123', email: 'super-secret@example.com' },

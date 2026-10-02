@@ -199,7 +199,7 @@ never plaintext (TICKET-102).
   50 emails/day; billing alerts at $10/$25 (TICKET-003, 302).
 - **Privacy** — raw email bodies are never persisted server-side beyond the
   request and never logged; only summaries are cached. Minimum Gmail scopes.
-  TLS everywhere. Full policy in `docs/privacy.md` when TICKET-303 lands.
+  TLS everywhere. Full inventory, retention and deletion paths in `docs/privacy.md`.
 - **Reliability** — errors are handled at the boundary: 5xx never leaks stack
   traces, consent revocation surfaces a "reconnect" card instead of a crash,
   a missed schedule falls back to on-demand generation, verse lookup failure

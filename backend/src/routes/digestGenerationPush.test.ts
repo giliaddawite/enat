@@ -118,6 +118,22 @@ describe('createDigestGenerationPushHandler', () => {
     expect(response.status).toBe(200);
   });
 
+  it('acks without a lookup when the uid is not a safe document id', async () => {
+    const getUser = vi.fn(() => Promise.resolve(USER));
+    const generate = vi.fn(() => Promise.resolve({ digest: DIGEST, persisted: true }));
+    const running = await serve({ getUser, generation: fakeGeneration(generate) });
+
+    const response = await running.fetch('/internal/digest-generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(pushEnvelope({ uid: 'uid-1/../other' })),
+    });
+
+    expect(response.status).toBe(200);
+    expect(getUser).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
   it('acks when the uid names no known user', async () => {
     const generate = vi.fn(() => Promise.resolve({ digest: DIGEST, persisted: true }));
     const running = await serve({

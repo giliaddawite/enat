@@ -16,6 +16,20 @@ interface KeySet {
   readonly jwks: ReturnType<typeof createLocalJWKSet>;
   wrongKeySign(claims: Record<string, unknown>): Promise<string>;
   unknownKidSign(claims: Record<string, unknown>): Promise<string>;
+  /** A token signed with a symmetric HS256 key — the classic algorithm-confusion forgery. */
+  hmacSign(claims: Record<string, unknown>): Promise<string>;
+  /** Correctly RS256-signed, but with a `crit` header naming an extension jose does not know. */
+  signWithUnknownCrit(claims: Record<string, unknown>): Promise<string>;
+}
+
+/** A compact JWS with an arbitrary `alg` header and a bogus signature, for algorithms
+ * jose will not sign with (`none`, or one it does not know). */
+function forgeWithAlg(alg: string, claims: Record<string, unknown>): string {
+  const encode = (value: unknown): string =>
+    Buffer.from(JSON.stringify(value)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { ...claims, iss: ISSUER, aud: AUDIENCE, iat: now, exp: now + 3600 };
+  return `${encode({ alg, kid: 'test-key' })}.${encode(payload)}.${alg === 'none' ? '' : 'c2ln'}`;
 }
 
 interface SignOptions {
@@ -23,6 +37,8 @@ interface SignOptions {
   readonly audience?: string;
   readonly expiresInSeconds?: number;
   readonly issuedAtSecondsAgo?: number;
+  /** Leaves the `exp` claim off entirely — a token that would never expire. */
+  readonly omitExpiry?: boolean;
 }
 
 async function buildKeySet(): Promise<KeySet> {
@@ -33,13 +49,15 @@ async function buildKeySet(): Promise<KeySet> {
 
   const sign = (claims: Record<string, unknown>, options: SignOptions = {}): Promise<string> => {
     const now = Math.floor(Date.now() / 1000) - (options.issuedAtSecondsAgo ?? 0);
-    return new SignJWT(claims)
+    const jwt = new SignJWT(claims)
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
       .setIssuedAt(now)
-      .setExpirationTime(now + (options.expiresInSeconds ?? 3600))
       .setIssuer(options.issuer ?? ISSUER)
-      .setAudience(options.audience ?? AUDIENCE)
-      .sign(privateKey);
+      .setAudience(options.audience ?? AUDIENCE);
+    if (!options.omitExpiry) {
+      jwt.setExpirationTime(now + (options.expiresInSeconds ?? 3600));
+    }
+    return jwt.sign(privateKey);
   };
 
   // Signed by a key never published in `jwks`, simulating a forged token.
@@ -63,7 +81,27 @@ async function buildKeySet(): Promise<KeySet> {
       .setAudience(AUDIENCE)
       .sign(privateKey);
 
-  return { sign, jwks, wrongKeySign, unknownKidSign };
+  const hmacSign = (claims: Record<string, unknown>): Promise<string> =>
+    new SignJWT(claims)
+      .setProtectedHeader({ alg: 'HS256', kid: 'test-key' })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .sign(new TextEncoder().encode('an-attacker-chosen-shared-secret-of-32b'));
+
+  const signWithUnknownCrit = (claims: Record<string, unknown>): Promise<string> =>
+    new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key', crit: ['x-unknown'], 'x-unknown': 1 })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      // The signer must be told the extension is understood, or jose refuses to sign it
+      // for the same reason the verifier will refuse to verify it.
+      .sign(privateKey, { crit: { 'x-unknown': true } });
+
+  return { sign, jwks, wrongKeySign, unknownKidSign, hmacSign, signWithUnknownCrit };
 }
 
 const VALID_CLAIMS = {
@@ -127,6 +165,17 @@ describe('createGoogleIdTokenVerifier', () => {
     expect((error as IdTokenRejectedError).reason).toBe('wrong_audience');
   });
 
+  it('rejects a validly signed token that carries no exp claim', async () => {
+    const token = await keys.sign(VALID_CLAIMS, { omitExpiry: true });
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_claims');
+  });
+
   it('rejects a token from an unrecognized issuer', async () => {
     const token = await keys.sign(VALID_CLAIMS, { issuer: 'https://not-google.example' });
 
@@ -151,6 +200,42 @@ describe('createGoogleIdTokenVerifier', () => {
 
   it('rejects a token whose kid is not in the key set as a signature failure', async () => {
     const token = await keys.unknownKidSign(VALID_CLAIMS);
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
+
+  it('rejects an HS256-signed token as a bad signature, not as a verification outage', async () => {
+    const token = await keys.hmacSign(VALID_CLAIMS);
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
+
+  it.each(['none', 'XS256'])(
+    'rejects a token whose header claims alg %j as a bad signature, not as an outage',
+    async (alg) => {
+      const error = await verifier()
+        .verify(forgeWithAlg(alg, VALID_CLAIMS))
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(IdTokenRejectedError);
+      expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+    },
+  );
+
+  it('rejects a token with an unrecognized critical header as a bad signature, not an outage', async () => {
+    // jose refuses an unknown `crit` extension with JOSENotSupported — a different error
+    // class from the algorithm check, and the one branch the alg tests above cannot reach.
+    const token = await keys.signWithUnknownCrit(VALID_CLAIMS);
 
     const error = await verifier()
       .verify(token)

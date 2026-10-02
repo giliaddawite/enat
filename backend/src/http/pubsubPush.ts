@@ -10,11 +10,13 @@ import { HttpError } from './httpError.js';
 /**
  * Verifies the Google-signed OIDC token Pub/Sub attaches to every push request
  * (`Authorization: Bearer <token>`, minted for the push subscription's configured invoker
- * service account). This is defense in depth, not the primary gate: Cloud Run's own IAM —
- * only that service account may invoke this URL — is what actually keeps the endpoint from
- * being called by an arbitrary caller (see infra/README.md). A Pub/Sub push token is an
- * ordinary Google ID token, just minted for a service account rather than an end user, so
- * this reuses the same `IdTokenVerifier` port `authenticate` (TICKET-102) verifies against.
+ * service account). This is the boundary, not defense in depth: the service is publicly
+ * invokable because the Android app calls `/v1` directly, so Cloud Run IAM admits any
+ * caller to this URL and only this check — signature, audience, expiry, and the verified
+ * signer email — decides whether a push is honoured (see infra/README.md). A Pub/Sub push
+ * token is an ordinary Google ID token, just minted for a service account rather than an
+ * end user, so this reuses the same `IdTokenVerifier` port `authenticate` (TICKET-102)
+ * verifies against.
  */
 export interface VerifyPubSubPushDependencies {
   readonly idTokenVerifier: IdTokenVerifier;

@@ -1,5 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import type * as AnthropicSdk from '@anthropic-ai/sdk';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createClaudeSummarizer, DEFAULT_CLAUDE_MODEL } from './claudeClient.js';
+
+/** Every options object the SDK client was constructed with, recorded by the wrapper below. */
+const constructed = vi.hoisted(() => ({ options: [] as Record<string, unknown>[] }));
+
+// The real SDK class, wrapped only to observe its constructor arguments: everything else
+// (request shaping, retries, parsing) stays genuine, exercised through the injected fetch.
+vi.mock('@anthropic-ai/sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof AnthropicSdk>();
+  class RecordingAnthropic extends actual.default {
+    constructor(options: ConstructorParameters<typeof actual.default>[0]) {
+      super(options);
+      constructed.options.push({ ...options });
+    }
+  }
+  return { ...actual, default: RecordingAnthropic };
+});
 
 interface RecordedRequest {
   url: string;
@@ -44,6 +61,32 @@ function fakeFetch(responses: readonly Response[]) {
 const REQUEST = { system: 'system prompt', user: 'user prompt', maxOutputTokens: 900 };
 
 describe('createClaudeSummarizer', () => {
+  afterEach(() => {
+    constructed.options.length = 0;
+    vi.unstubAllEnvs();
+  });
+
+  it('pins the API base URL and disables SDK logging on the client', () => {
+    createClaudeSummarizer({ apiKey: 'test-key' });
+
+    expect(constructed.options).toHaveLength(1);
+    expect(constructed.options[0]).toMatchObject({
+      baseURL: 'https://api.anthropic.com',
+      logLevel: 'off',
+    });
+  });
+
+  it('sends prompts to api.anthropic.com even when ANTHROPIC_BASE_URL points elsewhere', async () => {
+    vi.stubEnv('ANTHROPIC_BASE_URL', 'http://prompt-sink.example');
+    vi.stubEnv('ANTHROPIC_LOG', 'debug');
+    const { impl, requests } = fakeFetch([messageResponse('ok')]);
+    const summarizer = createClaudeSummarizer({ apiKey: 'test-key', fetch: impl });
+
+    await summarizer.complete(REQUEST);
+
+    expect(requests[0]?.url.startsWith('https://api.anthropic.com/')).toBe(true);
+  });
+
   it('sends one Messages API call with the prompt and output cap', async () => {
     const { impl, requests } = fakeFetch([messageResponse('{"summaries":[]}')]);
     const summarizer = createClaudeSummarizer({ apiKey: 'test-key', fetch: impl });

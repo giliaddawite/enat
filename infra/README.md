@@ -33,15 +33,38 @@ TICKET-002.
 gcloud run services replace infra/cloudrun/service.staging.yaml --region us-central1
 ```
 
-## Do not make this service public yet
+## Who may invoke the service
 
-This file grants no IAM. Until TICKET-102 lands its ID-token verification middleware, the
-service has **no authentication of its own** and IAM is the only gate in front of it. Do
-not grant `roles/run.invoker` to `allUsers` before then — every route, including the
-unmatched-path handler, would be reachable unauthenticated and unrated.
+The Android app calls `/v1/*` directly with a Google ID token in `Authorization`, and a
+phone has no Cloud Run IAM identity, so the service **must be publicly invokable**:
+`roles/run.invoker` is granted to `allUsers`, and `ingress: all` lets the request in. That
+makes the application-layer checks the entire boundary — there is no IAM gate behind them:
 
-`ingress: all` is correct and necessary for an Android client; it is IAM, not ingress,
-that is holding the door here.
+- **`/v1/*`** — `authenticate` (`backend/src/http/auth.ts`) verifies the Google ID token's
+  signature against Google's JWKS, its issuer, audience (`GOOGLE_OAUTH_AUDIENCE`), `exp`,
+  and required claims, then `rateLimit` applies the per-user budget. Every `/v1` route is
+  registered behind both by construction (`app.ts`).
+- **`/internal/digest-generate`** — `verifyPubSubPush` (`backend/src/http/pubsubPush.ts`)
+  verifies the OIDC token Pub/Sub attaches to the push the same way (signature, issuer,
+  expiry), with the audience pinned to `PUBSUB_PUSH_AUDIENCE` and the token's verified
+  `email` required to equal `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL` — the one service
+  account the push subscription is configured to sign as. An arbitrary caller cannot obtain
+  such a token, because only that service account's key can mint one with that audience.
+  The route is not mounted at all when either variable is unset.
+- **`/healthz`** is open and dependency-free, for Cloud Run's startup probe.
+- Everything else — unmatched paths included — leaves through `notFound` and the error
+  handler, which never include detail.
+
+The `run.invoker` grant to the `enat-scheduler` service account below is therefore not
+what protects `/internal` (anyone can invoke the URL); it is what lets the push *succeed*
+at the IAM layer, and the token check is what decides whether it is honoured.
+
+**Alternative, if the exposure is ever judged too wide:** split `/internal/*` into a second
+Cloud Run service built from the same image (an env flag selecting which routes mount),
+with `ingress: internal` and `run.invoker` granted only to `enat-scheduler`. That puts an
+IAM gate in front of the token check at the cost of a second service to deploy and
+monitor. It is not done today because the token check is already a complete
+authentication of the caller, and one service is cheaper to run at zero.
 
 ## Prerequisites not yet in place
 
@@ -52,6 +75,55 @@ substitutes the placeholders, and applies this file on every push to `main` — 
 TICKET-003 provisions the project and secrets, this configuration is unapplied and the
 runtime acceptance criteria in TICKET-101 (scale to zero, cold-start latency) cannot be
 measured. See [`docs/backend-runtime.md`](../docs/backend-runtime.md).
+
+## Firestore retention policies (TICKET-303)
+
+Two collections hold data derived from the user's mail, and neither may keep it
+indefinitely (see [`docs/privacy.md`](../docs/privacy.md)):
+
+| Collection | What it holds | Retention | Written by |
+| --- | --- | --- | --- |
+| `digests` | one document per user per day: sender, subject and Amharic summary per email | 30 days | `backend/src/adapters/digestRepository.ts` |
+| `emailSummaries` | one document per user, prompt version and message: category, summary, urgency | 90 days | `backend/src/adapters/summaryCacheRepository.ts` |
+
+The repositories stamp every document with an `expireAt` timestamp at write time, computed
+from the injected clock. Firestore deletes expired documents only when a **TTL policy** on
+that field exists for the collection group, so the policy is part of provisioning the
+project — without it, `expireAt` is just a field. Enable both (once per project; the
+command is idempotent and takes a few minutes to become active):
+
+```sh
+gcloud firestore fields ttls update expireAt \
+  --collection-group=digests --enable-ttl --project PROJECT_ID
+
+gcloud firestore fields ttls update expireAt \
+  --collection-group=emailSummaries --enable-ttl --project PROJECT_ID
+
+# Verify: both should list `ttlConfig: state: ACTIVE` once provisioning completes.
+gcloud firestore fields ttls list --project PROJECT_ID
+```
+
+Add `--database=<id>` to each command if the service uses a named database rather than
+`(default)`. TTL deletion is best-effort and typically completes within 24 hours of
+`expireAt`; the read path never depends on it (`findLatestDigest` looks back days, and the
+summary cache is keyed so a missing document is simply re-summarized), so the only effect
+of a missing policy is retention, which is exactly why it must be verified, not assumed.
+Changing a retention period is a code change to the constant in the repository named
+above, not a `gcloud` change: the policy only says *which field* expires a document.
+
+**Existing documents.** Anything written before `expireAt` existed has no stamp and would
+never be deleted by the policy. Both repositories tolerate such documents on read — they
+are served normally, never regenerated or re-summarized — and backfill `expireAt` in
+place, anchored on the document's own `generatedAt`/`createdAt`, so an old document ages
+out on the same schedule as a new one the first time anything reads it. Documents nothing
+reads again (a digest older than the read path's lookback, a summary for mail that left
+the inbox) keep no stamp; if a clean slate is wanted instead of waiting, delete the two
+collections wholesale — everything in them is derived and is regenerated on the next run,
+at the cost of one Claude call per email still inside the digest window:
+
+```sh
+gcloud firestore bulk-delete --collection-ids=digests,emailSummaries --project PROJECT_ID
+```
 
 ## Digest generation scheduling (TICKET-105)
 
@@ -141,7 +213,78 @@ digests; `/internal/digest-generate` (missing `PUBSUB_PUSH_AUDIENCE`/
 `POST /v1/digest/generate` (missing the other three) answers a clear 500 rather than
 crash-looping the service — see `backend/src/index.ts`.
 
-**IAM is the real gate here, same as the warning above for the whole service.** Never grant
-`roles/run.invoker` on this service to `allUsers`; `/internal/digest-generate` verifies the
-pushed OIDC token as defense in depth, but the actual boundary is that only the
-`enat-scheduler` service account may invoke the service at all.
+The boundary for `/internal/digest-generate` is `verifyPubSubPush`, as described under
+[Who may invoke the service](#who-may-invoke-the-service): the service is public, and the
+pushed OIDC token's signature, audience, expiry and signer email are what admit a request.
+
+## Runtime service account permissions (TICKET-303)
+
+The runtime service account (`enat-api-staging@PROJECT_ID.iam.gserviceaccount.com`) needs
+exactly three things beyond the `secretAccessor` grants on the three config secrets above.
+Grant nothing broader — in particular not `roles/secretmanager.admin`, which would let a
+compromised instance read every secret in the project, including the config secrets'
+future versions and other users' tokens.
+
+**1. Firestore.** `roles/datastore.user` — document reads and writes on `users`,
+`digests`, `emailSummaries` and `gmailSyncState`. It carries no index, TTL-policy or
+export permission, so the retention policies above cannot be altered from inside the
+service.
+
+```sh
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member "serviceAccount:enat-api-staging@PROJECT_ID.iam.gserviceaccount.com" \
+  --role roles/datastore.user
+```
+
+**2. Secret Manager, for the per-user Gmail refresh tokens.** `refreshTokenStore.ts` via
+`secretManagerClient.ts` performs exactly these operations and no others:
+
+| Operation | Permission | Resource |
+| --- | --- | --- |
+| `createSecret` (first consent for a user) | `secretmanager.secrets.create` | the **project** — a secret that does not exist yet has no resource of its own |
+| `addSecretVersion` (store / rotate the token) | `secretmanager.versions.add` | `projects/<num>/secrets/gmail-refresh-token-<uid>` |
+| `listSecretVersions` (find superseded versions) | `secretmanager.versions.list` | same |
+| `accessSecretVersion` (mint a Gmail access token) | `secretmanager.versions.access` | same |
+| `destroySecretVersion` (retire superseded versions) | `secretmanager.versions.destroy` | same |
+
+Bundle those five into a custom role, then bind it at project level with an IAM condition
+that limits the version operations to the `gmail-refresh-token-` prefix. The condition
+must allow the project itself too, or `secrets.create` — whose resource is the project —
+is denied. `<num>` is the numeric project number (`gcloud projects describe PROJECT_ID
+--format 'value(projectNumber)'`), which is how Secret Manager names resources in IAM
+conditions.
+
+```sh
+gcloud iam roles create enatRefreshTokenStore --project PROJECT_ID \
+  --title "Enat refresh token store" \
+  --description "Create per-user gmail-refresh-token-* secrets and manage their versions" \
+  --permissions secretmanager.secrets.create,secretmanager.versions.add,secretmanager.versions.list,secretmanager.versions.access,secretmanager.versions.destroy \
+  --stage GA
+
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member "serviceAccount:enat-api-staging@PROJECT_ID.iam.gserviceaccount.com" \
+  --role "projects/PROJECT_ID/roles/enatRefreshTokenStore" \
+  --condition='title=enat-refresh-tokens-only,description=Only gmail-refresh-token-* secrets plus project-level create,expression=resource.name.startsWith("projects/<num>/secrets/gmail-refresh-token-") || resource.name == "projects/<num>"'
+```
+
+What this deliberately leaves out: `secretmanager.secrets.get/list/delete/update` (the
+service never enumerates or deletes secret containers — whole-user deletion in
+`docs/privacy.md` is an operator action), `secretmanager.versions.enable/disable`, and
+any access to secrets outside the prefix. The config secrets (`claude-api-key`,
+`google-oauth-client-id`, `google-oauth-client-secret`) stay on their separate
+per-secret `secretAccessor` bindings above and are not reachable through this role.
+
+**3. Logging** needs no role. A custom runtime service account starts with no roles at all,
+and none is needed for logs: Cloud Run itself collects the container's stdout and stderr
+into Cloud Logging, independent of the service account's IAM. (Cloud Trace correlation is
+done by a field in the log line, not by an API call.)
+
+**Verify on staging once billing is restored.** The project-level `secrets.create` grant
+with the prefix condition is the one binding here that is easy to get subtly wrong — the
+condition's project clause, the project *number* versus *id* — and the only way to be sure
+is the first real consent: run the Gmail consent flow for one account and confirm
+`gcloud secrets list --filter="name:gmail-refresh-token-"` shows the new secret and the
+service logged no `PERMISSION_DENIED`. Accepted trade-off: because `secrets.create` is
+granted on the project, the service account can create a secret of *any* name; the
+condition confines what it can then *do* with versions to the `gmail-refresh-token-`
+prefix, which is the part that matters (a stray empty container is noise, not exposure).

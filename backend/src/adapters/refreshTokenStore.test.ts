@@ -167,6 +167,16 @@ describe('createSecretManagerRefreshTokenStore', () => {
     );
   });
 
+  it('refuses a uid that could name a different secret, before touching Secret Manager', async () => {
+    const { secretManager, createSecret } = fakeSecretManager();
+    const store = createSecretManagerRefreshTokenStore(secretManager);
+
+    await expect(store.put('other-user/versions/1', 'token')).rejects.toThrow(
+      /safe-id shape check/,
+    );
+    expect(createSecret).not.toHaveBeenCalled();
+  });
+
   it('never logs a version resource name, which embeds the uid', async () => {
     const { secretManager, destroySecretVersion } = fakeSecretManager();
     const logs = captureLogs();

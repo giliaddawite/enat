@@ -5,6 +5,7 @@ import {
   type GmailConsentService,
 } from '../domain/gmailConsent.js';
 import { GmailConsentRequest } from '../http/apiSchemas.js';
+import { describeError } from '../http/describeError.js';
 import { HttpError } from '../http/httpError.js';
 import { requireUser } from '../http/requireUser.js';
 
@@ -61,10 +62,9 @@ async function handle(
     }
     if (error instanceof AuthCodeExchangeUnavailableError) {
       // Logged here because the error handler only describes the HttpError it receives;
-      // the message is status-and-shape only (see the adapter), never Google's body.
-      req.log?.error('gmail consent exchange unavailable', {
-        error: { name: error.name, message: error.message },
-      });
+      // rendered by the shared allowlist, under which this class keeps its message (it is
+      // status-and-shape only — see the adapter — never Google's body).
+      req.log?.error('gmail consent exchange unavailable', { error: describeError(error) });
       throw new HttpError(502);
     }
     throw error;

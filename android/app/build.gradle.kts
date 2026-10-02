@@ -37,6 +37,17 @@ val stagingApiBaseUrl: String =
         ?: localApiBaseUrl
         ?: "https://enat-api-staging.example.run.app/v1/"
 
+// TLS everywhere (TICKET-303): the backend serves mailbox-derived data behind a bearer
+// token, and the manifest already pins usesCleartextTraffic=false, so a plain-http base
+// URL could never work at runtime — it would only fail once the app is on a phone. Fail
+// at configuration time instead, where the person who set the property is looking.
+check(stagingApiBaseUrl.startsWith("https://")) {
+    val scheme = stagingApiBaseUrl.substringBefore("://", "<none>")
+    "enatApiBaseUrl must be an https:// URL (got scheme '$scheme'). Fix the " +
+        "enatApiBaseUrl Gradle property in android/local.properties or the " +
+        "ORG_GRADLE_PROJECT_enatApiBaseUrl environment variable."
+}
+
 // The web OAuth client id drives the server auth-code flow (TICKET-202). It is
 // configuration, not a secret — it appears in every consent screen URL — but per the
 // TICKET-201 review it stays out of tracked files, following the enatApiBaseUrl

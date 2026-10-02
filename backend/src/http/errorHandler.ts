@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from 'express';
-import type { LogFields, Logger } from '../logging/logger.js';
+import type { Logger } from '../logging/logger.js';
 import type { ErrorResponse } from './apiSchemas.js';
+import { describeError } from './describeError.js';
 import { HttpError, statusText, statusToCode } from './httpError.js';
 
 interface ClientError {
@@ -11,7 +12,8 @@ interface ClientError {
 
 /**
  * Terminal error handler. Clients get a status, a stable code and a generic message;
- * diagnostics (stack, original message) go to the log entry only.
+ * diagnostics go to the log entry only, rendered by `describeError` — message and stack
+ * for errors this service defines, name and code for everything else.
  *
  * `fallbackLogger` is used when the failure happened before requestLogging bound `req.log`.
  */
@@ -75,16 +77,4 @@ function declaredStatus(error: unknown): number | undefined {
     return status as number;
   }
   return Number.isInteger(statusCode) ? (statusCode as number) : undefined;
-}
-
-/**
- * Thrown values that are not Errors are described by shape only: an arbitrary rejected
- * value may hold user data, and log entries must stay free of it. Error messages raised in
- * this service must likewise never interpolate email content or other personal data.
- */
-function describeError(error: unknown): LogFields {
-  if (error instanceof Error) {
-    return { name: error.name, message: error.message, stack: error.stack };
-  }
-  return { name: 'NonError', type: typeof error };
 }

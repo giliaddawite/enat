@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Digest } from '../domain/digest.js';
+import { SAFE_ID } from '../domain/safeId.js';
 import { EMAIL_CATEGORIES } from '../domain/summary.js';
 import type { DailyVerse } from '../domain/verse.js';
 
@@ -87,7 +88,9 @@ export const PubSubPushEnvelope = z.object({
   }),
 });
 
-/** The decoded `message.data` of a digest generation push. */
+/** The decoded `message.data` of a digest generation push. The uid becomes a Firestore
+ * document id, so it is held to the safe-id charset here, at the boundary, before any
+ * repository sees it. */
 export const DigestGenerationPushPayload = z.object({
-  uid: z.string().min(1),
+  uid: z.string().min(1).regex(SAFE_ID),
 });

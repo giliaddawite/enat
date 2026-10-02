@@ -11,6 +11,7 @@ import {
   type DigestPrompt,
 } from './summarizationPrompt.js';
 import { EMAIL_CATEGORIES, type CacheableEmailSummary, type EmailSummary } from './summary.js';
+import { describeForeignError } from '../logging/foreignError.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -295,12 +296,12 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
         promptVersion: PROMPT_VERSION,
       });
     } catch (error) {
-      // Only the error's class name is logged: an SDK message is an uncontrolled string
-      // on a request whose body is private mail, and no content may reach a log line.
+      // Name and code only: an SDK message is an uncontrolled string on a request whose
+      // body is private mail, and no content may reach a log line.
       deps.logger?.error('digest batch call failed; falling back to heuristics', {
         emailCount: emails.length,
         promptVersion: PROMPT_VERSION,
-        errorName: error instanceof Error ? error.name : typeof error,
+        error: describeForeignError(error),
       });
     }
     return new Map();
@@ -318,7 +319,7 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
     } catch (error) {
       deps.logger?.warn('summary cache read failed; treating all emails as uncached', {
         count: messageIds.length,
-        errorName: error instanceof Error ? error.name : typeof error,
+        error: describeForeignError(error),
       });
       return new Map();
     }
@@ -379,7 +380,7 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
           // re-summarizes these emails.
           deps.logger?.warn('summary cache write failed; digest continues uncached', {
             count: fresh.length,
-            errorName: error instanceof Error ? error.name : typeof error,
+            error: describeForeignError(error),
           });
         }
       }

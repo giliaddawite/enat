@@ -1,9 +1,12 @@
+import { Timestamp } from '@google-cloud/firestore';
 import { z } from 'zod';
 import type { DigestStore } from '../domain/digestGeneration.js';
 import type { Digest, DigestEmailItem, DigestSection } from '../domain/digest.js';
+import { isSafeId } from '../domain/safeId.js';
 import { EMAIL_CATEGORIES } from '../domain/summary.js';
 import type { Logger } from '../logging/logger.js';
-import type { FirestoreLike } from './usersRepository.js';
+import { retentionExpireAt, storedInstantOr } from './firestoreRetention.js';
+import type { FirestoreDocumentLike, FirestoreLike } from './usersRepository.js';
 
 /**
  * Firestore-backed `digests` collection (TICKET-105), one document per user per day.
@@ -14,13 +17,21 @@ import type { FirestoreLike } from './usersRepository.js';
  */
 const DIGESTS_COLLECTION = 'digests';
 
+/**
+ * Retention (TICKET-303, docs/privacy.md). A digest carries each email's sender and
+ * subject — the app renders both — so the document is personal data and must not live
+ * forever. `expireAt` is the Firestore TTL field (infra/README.md has the policy command);
+ * the read path never serves a digest this old anyway (`findLatestDigest` looks back days,
+ * not weeks), so expiry costs nothing the user can see.
+ */
+export const DIGEST_RETENTION_DAYS = 30;
+
 /** The gRPC status code Firestore raises from `create()` on a conflicting document. */
 const FIRESTORE_ALREADY_EXISTS_CODE = 6;
 
-/** Ids are interpolated into a document path; a Google user id is a URL-safe token and a
- * date is always `YYYY-MM-DD`, so anything else at this boundary is rejected rather than
- * risking a path escape into another user's document. */
-const SAFE_UID = /^[A-Za-z0-9-]+$/;
+/** Ids are interpolated into a document path; the uid must satisfy `isSafeId` and a date is
+ * always `YYYY-MM-DD`, so anything else at this boundary is rejected rather than risking a
+ * path escape into another user's document. */
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
 const DigestEmailItemDocument = z.object({
@@ -43,9 +54,15 @@ const DigestDocument = z.object({
   sections: z.array(DigestSectionDocument),
   generatedAt: z.string().min(1),
   emailCount: z.number().int().nonnegative(),
+  // Optional on read: documents written before TICKET-303 carry no stamp. They are served
+  // as-is and backfilled in place (see `get`), never regenerated — regeneration would cost
+  // Gmail and Claude calls to produce the same content the document already holds.
+  expireAt: z.instanceof(Timestamp).optional(),
 });
 
 export interface DigestRepositoryOptions {
+  /** Injected clock; `expireAt` is computed from it at write time. */
+  readonly now?: () => Date;
   /** Receives a warning when a stored document is invalid; never document contents. */
   readonly logger?: Logger;
 }
@@ -54,10 +71,11 @@ export function createFirestoreDigestStore(
   firestore: FirestoreLike,
   options: DigestRepositoryOptions = {},
 ): DigestStore {
+  const now = options.now ?? (() => new Date());
   const collection = firestore.collection(DIGESTS_COLLECTION);
 
   function documentId(uid: string, date: string): string | null {
-    if (!SAFE_UID.test(uid) || !DATE_KEY.test(date)) {
+    if (!isSafeId(uid) || !DATE_KEY.test(date)) {
       options.logger?.warn('digest document id rejected by shape check', {
         uidLength: uid.length,
       });
@@ -89,6 +107,9 @@ export function createFirestoreDigestStore(
         options.logger?.warn('digest document key mismatch; treating as absent', { uid, date });
         return null;
       }
+      if (parsed.data.expireAt === undefined) {
+        await backfillExpireAt(collection.doc(id), parsed.data.generatedAt, uid, date);
+      }
       return toDigest(parsed.data);
     },
 
@@ -98,7 +119,7 @@ export function createFirestoreDigestStore(
         throw new Error('digest save rejected: uid or date failed the safe-id shape check');
       }
       const document = collection.doc(id);
-      const data = toDocument(digest);
+      const data = toDocument(digest, retentionExpireAt(now(), DIGEST_RETENTION_DAYS));
       try {
         await document.create(data);
       } catch (error) {
@@ -109,6 +130,33 @@ export function createFirestoreDigestStore(
       }
     },
   };
+
+  /**
+   * Stamps a pre-TTL document with the deadline it would have had, anchored on its own
+   * `generatedAt`, so old digests age out on the same schedule as new ones. A failed
+   * backfill is logged and tolerated — the read still succeeds, and the next read retries.
+   *
+   * Known race, accepted: a `get` that backfills can interleave with a `save` regenerating
+   * the same day, and this older `expireAt` can land after the save's newer one. The
+   * document then expires earlier than a fresh write would — never later — so the error is
+   * in the privacy-safe direction, and the read path never serves a digest that old anyway.
+   */
+  async function backfillExpireAt(
+    document: FirestoreDocumentLike,
+    generatedAt: string,
+    uid: string,
+    date: string,
+  ): Promise<void> {
+    const writtenAt = storedInstantOr(generatedAt, now());
+    try {
+      await document.update({ expireAt: retentionExpireAt(writtenAt, DIGEST_RETENTION_DAYS) });
+    } catch {
+      options.logger?.warn('digest expireAt backfill failed; will retry on next read', {
+        uid,
+        date,
+      });
+    }
+  }
 }
 
 function toDigest(document: z.infer<typeof DigestDocument>): Digest {
@@ -131,12 +179,13 @@ function toDigest(document: z.infer<typeof DigestDocument>): Digest {
   };
 }
 
-function toDocument(digest: Digest): Record<string, unknown> {
+function toDocument(digest: Digest, expireAt: Timestamp): Record<string, unknown> {
   return {
     date: digest.date,
     userId: digest.userId,
     generatedAt: digest.generatedAt,
     emailCount: digest.emailCount,
+    expireAt,
     sections: digest.sections.map((section) => ({
       category: section.category,
       items: section.items.map((item) => ({
