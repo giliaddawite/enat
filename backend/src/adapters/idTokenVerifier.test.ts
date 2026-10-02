@@ -18,6 +18,8 @@ interface KeySet {
   unknownKidSign(claims: Record<string, unknown>): Promise<string>;
   /** A token signed with a symmetric HS256 key — the classic algorithm-confusion forgery. */
   hmacSign(claims: Record<string, unknown>): Promise<string>;
+  /** Correctly RS256-signed, but with a `crit` header naming an extension jose does not know. */
+  signWithUnknownCrit(claims: Record<string, unknown>): Promise<string>;
 }
 
 /** A compact JWS with an arbitrary `alg` header and a bogus signature, for algorithms
@@ -88,7 +90,18 @@ async function buildKeySet(): Promise<KeySet> {
       .setAudience(AUDIENCE)
       .sign(new TextEncoder().encode('an-attacker-chosen-shared-secret-of-32b'));
 
-  return { sign, jwks, wrongKeySign, unknownKidSign, hmacSign };
+  const signWithUnknownCrit = (claims: Record<string, unknown>): Promise<string> =>
+    new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid: 'test-key', crit: ['x-unknown'], 'x-unknown': 1 })
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      // The signer must be told the extension is understood, or jose refuses to sign it
+      // for the same reason the verifier will refuse to verify it.
+      .sign(privateKey, { crit: { 'x-unknown': true } });
+
+  return { sign, jwks, wrongKeySign, unknownKidSign, hmacSign, signWithUnknownCrit };
 }
 
 const VALID_CLAIMS = {
@@ -218,6 +231,19 @@ describe('createGoogleIdTokenVerifier', () => {
       expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
     },
   );
+
+  it('rejects a token with an unrecognized critical header as a bad signature, not an outage', async () => {
+    // jose refuses an unknown `crit` extension with JOSENotSupported — a different error
+    // class from the algorithm check, and the one branch the alg tests above cannot reach.
+    const token = await keys.signWithUnknownCrit(VALID_CLAIMS);
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_signature');
+  });
 
   it('reports a key-set fetch failure as unavailable, not as a token rejection', async () => {
     const failing = createGoogleIdTokenVerifier({
