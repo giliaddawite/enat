@@ -162,6 +162,13 @@ async function verifyClaims(
     const { payload } = await jwtVerify(idToken, jwks, {
       issuer: GOOGLE_ISSUERS,
       audience: [...audience],
+      // Google signs ID tokens with RS256 only; pinning it means a key-set entry with another
+      // `alg` (or a header claiming one) can never be selected, whatever the JWKS contains.
+      algorithms: ['RS256'],
+      // jose only validates `exp` when the claim is present. A token without one would
+      // otherwise verify forever, so its presence is required, along with the issued-at
+      // and subject every Google ID token carries.
+      requiredClaims: ['exp', 'iat', 'sub'],
     });
     return payload;
   } catch (error) {
@@ -175,6 +182,13 @@ function toRejection(error: unknown): IdTokenRejectedError | IdTokenVerification
   }
   if (error instanceof joseErrors.JWTClaimValidationFailed && error.claim === 'aud') {
     return new IdTokenRejectedError('wrong_audience', 'ID token audience mismatch', {
+      cause: error,
+    });
+  }
+  if (error instanceof joseErrors.JWTClaimValidationFailed && error.reason === 'missing') {
+    // A well-formed token lacking a `requiredClaims` member — the same defect the payload
+    // schema reports for the claims it checks, so it carries the same reason.
+    return new IdTokenRejectedError('invalid_claims', 'ID token payload failed validation', {
       cause: error,
     });
   }

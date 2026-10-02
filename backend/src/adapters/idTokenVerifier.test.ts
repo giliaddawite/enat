@@ -23,6 +23,8 @@ interface SignOptions {
   readonly audience?: string;
   readonly expiresInSeconds?: number;
   readonly issuedAtSecondsAgo?: number;
+  /** Leaves the `exp` claim off entirely — a token that would never expire. */
+  readonly omitExpiry?: boolean;
 }
 
 async function buildKeySet(): Promise<KeySet> {
@@ -33,13 +35,15 @@ async function buildKeySet(): Promise<KeySet> {
 
   const sign = (claims: Record<string, unknown>, options: SignOptions = {}): Promise<string> => {
     const now = Math.floor(Date.now() / 1000) - (options.issuedAtSecondsAgo ?? 0);
-    return new SignJWT(claims)
+    const jwt = new SignJWT(claims)
       .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
       .setIssuedAt(now)
-      .setExpirationTime(now + (options.expiresInSeconds ?? 3600))
       .setIssuer(options.issuer ?? ISSUER)
-      .setAudience(options.audience ?? AUDIENCE)
-      .sign(privateKey);
+      .setAudience(options.audience ?? AUDIENCE);
+    if (!options.omitExpiry) {
+      jwt.setExpirationTime(now + (options.expiresInSeconds ?? 3600));
+    }
+    return jwt.sign(privateKey);
   };
 
   // Signed by a key never published in `jwks`, simulating a forged token.
@@ -125,6 +129,17 @@ describe('createGoogleIdTokenVerifier', () => {
 
     expect(error).toBeInstanceOf(IdTokenRejectedError);
     expect((error as IdTokenRejectedError).reason).toBe('wrong_audience');
+  });
+
+  it('rejects a validly signed token that carries no exp claim', async () => {
+    const token = await keys.sign(VALID_CLAIMS, { omitExpiry: true });
+
+    const error = await verifier()
+      .verify(token)
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(IdTokenRejectedError);
+    expect((error as IdTokenRejectedError).reason).toBe('invalid_claims');
   });
 
   it('rejects a token from an unrecognized issuer', async () => {
