@@ -21,6 +21,14 @@ import type { Logger } from '../logging/logger.js';
  */
 export const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5';
 
+/**
+ * Pinned rather than left to the SDK's environment lookups. By default the SDK honours
+ * `ANTHROPIC_BASE_URL` (which could route prompts — and the email bodies in them — to an
+ * arbitrary host) and `ANTHROPIC_LOG=debug` (which dumps full request bodies to stderr,
+ * straight into Cloud Logging). Neither may ever be a one-env-var change on this service.
+ */
+const ANTHROPIC_API_BASE_URL = 'https://api.anthropic.com';
+
 export interface ClaudeSummarizerOptions {
   readonly apiKey: string;
   readonly model?: string;
@@ -36,6 +44,8 @@ export function createClaudeSummarizer(options: ClaudeSummarizerOptions): Summar
   const model = options.model ?? DEFAULT_CLAUDE_MODEL;
   const client = new Anthropic({
     apiKey: options.apiKey,
+    baseURL: ANTHROPIC_API_BASE_URL,
+    logLevel: 'off',
     maxRetries: options.maxRetries ?? 2,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
