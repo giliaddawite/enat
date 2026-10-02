@@ -131,4 +131,5 @@ fable-cooking/
 - Gmail access uses the minimum scopes (`gmail.readonly` + `gmail.modify`), and
   refresh tokens are encrypted at rest server-side.
 - Email bodies are never logged and never persisted beyond the request — only
-  summaries are cached. See TICKET-303 for the full privacy posture.
+  summaries are cached, and they expire. `docs/privacy.md` is the full
+  inventory: every store, its fields, retention and deletion path.
