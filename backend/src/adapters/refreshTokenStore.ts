@@ -1,3 +1,4 @@
+import { isSafeId } from '../domain/safeId.js';
 import { describeForeignError } from '../logging/foreignError.js';
 import type { Logger } from '../logging/logger.js';
 
@@ -123,7 +124,12 @@ function logRetirementFailure(logger: Logger | undefined, error: unknown): void 
   });
 }
 
+/** The uid becomes part of a Secret Manager resource name; the same safe-id charset the
+ * Firestore repositories enforce keeps it from addressing — or creating — another secret. */
 function secretIdForUser(uid: string): string {
+  if (!isSafeId(uid)) {
+    throw new Error('refresh token store rejected: uid failed the safe-id shape check');
+  }
   return `${REFRESH_TOKEN_SECRET_ID_PREFIX}${uid}`;
 }
 
