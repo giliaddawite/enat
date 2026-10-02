@@ -2,6 +2,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { describe, expect, it } from 'vitest';
 import type { Digest } from '../domain/digest.js';
 import { createFakeFirestore } from '../testing/fakeFirestore.js';
+import { captureLogs } from '../testing/httpTestServer.js';
 import { createFirestoreDigestStore, DIGEST_RETENTION_DAYS } from './digestRepository.js';
 
 const NOW = new Date('2026-08-17T06:30:00.000Z');
@@ -94,10 +95,56 @@ describe('createFirestoreDigestStore', () => {
     await expect(store.get('uid-1', '2026-08-17')).resolves.toBeNull();
   });
 
-  it('treats a document written without a retention stamp as absent, so it is regenerated with one', async () => {
-    const { store } = storeWith({ 'digests/uid-1_2026-08-17': { ...DIGEST } });
+  describe('documents written before expireAt existed', () => {
+    const OLD_DIGEST: Digest = {
+      ...DIGEST,
+      date: '2026-07-01',
+      generatedAt: '2026-07-01T06:30:00.000Z',
+    };
 
-    await expect(store.get('uid-1', '2026-08-17')).resolves.toBeNull();
+    it('serves the digest instead of treating it as absent', async () => {
+      const { store } = storeWith({ 'digests/uid-1_2026-07-01': { ...OLD_DIGEST } });
+
+      await expect(store.get('uid-1', '2026-07-01')).resolves.toEqual(OLD_DIGEST);
+    });
+
+    it('backfills expireAt from the stored generatedAt on first read', async () => {
+      const { store, documents } = storeWith({ 'digests/uid-1_2026-07-01': { ...OLD_DIGEST } });
+
+      await store.get('uid-1', '2026-07-01');
+
+      expect(documents['digests/uid-1_2026-07-01']).toEqual({
+        ...OLD_DIGEST,
+        expireAt: Timestamp.fromDate(new Date('2026-07-31T06:30:00.000Z')),
+      });
+    });
+
+    it('anchors the backfill on the clock when generatedAt does not parse', async () => {
+      const { store, documents } = storeWith({
+        'digests/uid-1_2026-07-01': { ...OLD_DIGEST, generatedAt: 'not-a-date' },
+      });
+
+      await store.get('uid-1', '2026-07-01');
+
+      expect(documents['digests/uid-1_2026-07-01']?.['expireAt']).toEqual(EXPIRE_AT);
+    });
+
+    it('still serves the digest when the backfill write fails, and logs it', async () => {
+      const { firestore } = createFakeFirestore({ 'digests/uid-1_2026-07-01': { ...OLD_DIGEST } });
+      const readOnly = {
+        collection: (name: string) => ({
+          doc: (id: string) => ({
+            ...firestore.collection(name).doc(id),
+            update: () => Promise.reject(Object.assign(new Error('UNAVAILABLE'), { code: 14 })),
+          }),
+        }),
+      };
+      const { logger, entries } = captureLogs();
+      const store = createFirestoreDigestStore(readOnly, { now: () => NOW, logger });
+
+      await expect(store.get('uid-1', '2026-07-01')).resolves.toEqual(OLD_DIGEST);
+      expect(entries.some((entry) => entry.message.includes('backfill failed'))).toBe(true);
+    });
   });
 
   it('treats a document whose key disagrees with its content as absent', async () => {

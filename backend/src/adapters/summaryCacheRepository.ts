@@ -4,6 +4,7 @@ import { stripSummaryFormatControls, type SummaryCacheStore } from '../domain/di
 import { isSafeId } from '../domain/safeId.js';
 import { EMAIL_CATEGORIES, type EmailSummary } from '../domain/summary.js';
 import type { Logger } from '../logging/logger.js';
+import { retentionExpireAt, storedInstantOr } from './firestoreRetention.js';
 import type { FirestoreLike } from './usersRepository.js';
 
 /**
@@ -22,7 +23,6 @@ const SUMMARY_COLLECTION = 'emailSummaries';
  * TTL field; infra/README.md has the policy command.
  */
 export const SUMMARY_RETENTION_DAYS = 90;
-const SUMMARY_RETENTION_MS = SUMMARY_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 const SummaryDocument = z.object({
   messageId: z.string().min(1),
@@ -33,7 +33,10 @@ const SummaryDocument = z.object({
   urgent: z.boolean(),
   promptVersion: z.string().min(1),
   createdAt: z.string().min(1),
-  expireAt: z.instanceof(Timestamp),
+  // Optional on read: documents written before TICKET-303 carry no stamp. They are still
+  // hits — re-summarizing would pay Claude again for content already in hand — and are
+  // backfilled in place by `getMany` so they age out like every other document.
+  expireAt: z.instanceof(Timestamp).optional(),
 });
 
 /** The gRPC status code Firestore raises from `create()` on a conflicting document. */
@@ -81,6 +84,7 @@ export function createFirestoreSummaryCacheStore(
   return {
     async getMany(uid, messageIds) {
       const hits = new Map<string, EmailSummary>();
+      const backfills: Promise<unknown>[] = [];
       for (let start = 0; start < messageIds.length; start += READ_CONCURRENCY) {
         const chunk = messageIds.slice(start, start + READ_CONCURRENCY);
         const snapshots = await Promise.all(
@@ -112,6 +116,29 @@ export function createFirestoreSummaryCacheStore(
             source: 'cache',
             promptVersion: parsed.data.promptVersion,
           });
+          if (parsed.data.expireAt === undefined) {
+            const id = documentId(uid, requestedId);
+            if (id !== null) {
+              backfills.push(
+                collection.doc(id).update({
+                  expireAt: retentionExpireAt(
+                    storedInstantOr(parsed.data.createdAt, now()),
+                    SUMMARY_RETENTION_DAYS,
+                  ),
+                }),
+              );
+            }
+          }
+        });
+      }
+      // Backfills are tolerated failures: the hits above are already correct, and an
+      // unstamped document is simply retried on the next read.
+      const failed = (await Promise.allSettled(backfills)).filter(
+        (outcome) => outcome.status === 'rejected',
+      ).length;
+      if (failed > 0) {
+        options.logger?.warn('summary cache expireAt backfill failed; will retry on next read', {
+          count: failed,
         });
       }
       return hits;
@@ -120,7 +147,7 @@ export function createFirestoreSummaryCacheStore(
     async setMany(uid, summaries) {
       const writtenAt = now();
       const createdAt = writtenAt.toISOString();
-      const expireAt = Timestamp.fromMillis(writtenAt.getTime() + SUMMARY_RETENTION_MS);
+      const expireAt = retentionExpireAt(writtenAt, SUMMARY_RETENTION_DAYS);
       // Every write is attempted before any failure surfaces: one Firestore hiccup must
       // not forfeit the other already-paid-for summaries in the batch.
       const outcomes = await Promise.allSettled(
@@ -143,8 +170,10 @@ export function createFirestoreSummaryCacheStore(
             if (!isAlreadyExists(error)) {
               throw error;
             }
-            // A concurrent run summarized the same email first; its result stands —
-            // overwriting would only spend a write on identical content.
+            // Another run cached this email first; its content stands. Only the retention
+            // stamp is written, so a document that reached this path without one (written
+            // before TICKET-303, and not seen by `getMany`) cannot be left to live forever.
+            await collection.doc(id).update({ expireAt });
           }
         }),
       );

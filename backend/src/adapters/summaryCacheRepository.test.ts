@@ -2,6 +2,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import { describe, expect, it } from 'vitest';
 import type { CacheableEmailSummary } from '../domain/summary.js';
 import { createFakeFirestore } from '../testing/fakeFirestore.js';
+import { captureLogs } from '../testing/httpTestServer.js';
 import {
   createFirestoreSummaryCacheStore,
   SUMMARY_RETENTION_DAYS,
@@ -82,16 +83,75 @@ describe('createFirestoreSummaryCacheStore', () => {
     expect(documents[`emailSummaries/${UID}_${VERSION}_msg-1`]?.['expireAt']).toEqual(EXPIRE_AT);
   });
 
-  it('treats a document written without a retention stamp as a miss, so it is re-cached with one', async () => {
-    const { store } = storeWith({
-      [`emailSummaries/${UID}_${VERSION}_msg-1`]: storedDocument('msg-1', {
-        expireAt: undefined,
-      }),
+  describe('documents written before expireAt existed', () => {
+    const OLD_CREATED_AT = '2026-06-01T09:00:00.000Z';
+    const OLD_KEY = `emailSummaries/${UID}_${VERSION}_msg-old`;
+
+    function oldDocument(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+      const withoutStamp = storedDocument('msg-old', { createdAt: OLD_CREATED_AT });
+      delete withoutStamp['expireAt'];
+      return { ...withoutStamp, ...overrides };
+    }
+
+    it('serves the cached summary as a hit rather than re-summarizing', async () => {
+      const { store } = storeWith({ [OLD_KEY]: oldDocument() });
+
+      const hits = await store.getMany(UID, ['msg-old']);
+
+      expect(hits.get('msg-old')).toMatchObject({ summary: 'ማጠቃለያ', source: 'cache' });
     });
 
-    const hits = await store.getMany(UID, ['msg-1']);
+    it('backfills expireAt from the stored createdAt on first read', async () => {
+      const { store, documents } = storeWith({ [OLD_KEY]: oldDocument() });
 
-    expect(hits.size).toBe(0);
+      await store.getMany(UID, ['msg-old']);
+
+      expect(documents[OLD_KEY]).toEqual({
+        ...oldDocument(),
+        expireAt: Timestamp.fromDate(new Date('2026-08-30T09:00:00.000Z')),
+      });
+    });
+
+    it('anchors the backfill on the clock when createdAt does not parse', async () => {
+      const { store, documents } = storeWith({ [OLD_KEY]: oldDocument({ createdAt: 'garbage' }) });
+
+      await store.getMany(UID, ['msg-old']);
+
+      expect(documents[OLD_KEY]?.['expireAt']).toEqual(EXPIRE_AT);
+    });
+
+    it('still returns the hit when the backfill write fails, and logs a count', async () => {
+      const { firestore } = createFakeFirestore({ [OLD_KEY]: oldDocument() });
+      const readOnly = {
+        collection: (name: string) => ({
+          doc: (id: string) => ({
+            ...firestore.collection(name).doc(id),
+            update: () => Promise.reject(Object.assign(new Error('UNAVAILABLE'), { code: 14 })),
+          }),
+        }),
+      };
+      const { logger, entries } = captureLogs();
+      const store = createFirestoreSummaryCacheStore(readOnly, {
+        promptVersion: VERSION,
+        now: () => NOW,
+        logger,
+      });
+
+      const hits = await store.getMany(UID, ['msg-old']);
+
+      expect(hits.size).toBe(1);
+      expect(
+        entries.some((entry) => entry.message.includes('backfill failed') && entry['count'] === 1),
+      ).toBe(true);
+    });
+
+    it('stamps an unstamped document that wins the write race instead of leaving it forever', async () => {
+      const { store, documents } = storeWith({ [OLD_KEY]: oldDocument() });
+
+      await store.setMany(UID, [{ ...cacheable('msg-old'), summary: 'ሌላ ማጠቃለያ' }]);
+
+      expect(documents[OLD_KEY]).toEqual({ ...oldDocument(), expireAt: EXPIRE_AT });
+    });
   });
 
   it('does not serve results cached under an older prompt version', async () => {

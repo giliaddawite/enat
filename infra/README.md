@@ -111,6 +111,20 @@ of a missing policy is retention, which is exactly why it must be verified, not 
 Changing a retention period is a code change to the constant in the repository named
 above, not a `gcloud` change: the policy only says *which field* expires a document.
 
+**Existing documents.** Anything written before `expireAt` existed has no stamp and would
+never be deleted by the policy. Both repositories tolerate such documents on read — they
+are served normally, never regenerated or re-summarized — and backfill `expireAt` in
+place, anchored on the document's own `generatedAt`/`createdAt`, so an old document ages
+out on the same schedule as a new one the first time anything reads it. Documents nothing
+reads again (a digest older than the read path's lookback, a summary for mail that left
+the inbox) keep no stamp; if a clean slate is wanted instead of waiting, delete the two
+collections wholesale — everything in them is derived and is regenerated on the next run,
+at the cost of one Claude call per email still inside the digest window:
+
+```sh
+gcloud firestore bulk-delete --collection-ids=digests,emailSummaries --project PROJECT_ID
+```
+
 ## Digest generation scheduling (TICKET-105)
 
 Cloud Scheduler publishes to a Pub/Sub topic every morning; the topic's push subscription
