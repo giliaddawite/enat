@@ -36,7 +36,12 @@ nor can misconfigure this. All traffic between the app, the service, Gmail, Clau
 Firestore and Secret Manager is TLS: Cloud Run terminates HTTPS, the Android client refuses
 cleartext (`usesCleartextTraffic="false"`) and the Gradle build refuses a non-`https://`
 API base URL, and the Anthropic client's base URL is pinned in code to
-`https://api.anthropic.com` so no environment variable can redirect it.
+`https://api.anthropic.com` so no environment variable can redirect it. The Google SDKs
+have equivalent environment hooks — `FIRESTORE_EMULATOR_HOST` redirects every Firestore
+call unauthenticated to an arbitrary host, and `GOOGLE_SDK_NODE_LOGGING` / `GRPC_TRACE`
+print request payloads, including Secret Manager's refresh-token payloads, to stderr —
+so `loadConfig` refuses to boot in production if any of them is set
+(`backend/src/config.ts`).
 
 | Store | Collection / resource | Fields | PII class | Retention | Deletion path |
 | --- | --- | --- | --- | --- | --- |
@@ -62,7 +67,7 @@ days, not weeks) and short enough that the collection never becomes a mailbox in
 | Processor | What leaves GCP | What comes back | Retention there |
 | --- | --- | --- | --- |
 | **Anthropic (Claude API)** — `backend/src/adapters/claudeClient.ts`, prompt in `domain/summarizationPrompt.ts` | One prompt per digest batch containing, for each email to be summarized: its Gmail `messageId` (the correlation key the reply is matched on), sender, subject, received time, and the body text truncated to the per-email token budget (or the Gmail snippet when no body was fetched). On a malformed reply, one retry echoes up to 500 tokens of that reply back. Never the user's identity: no `uid` and no account email is sent. | Category, Amharic summary and urgency per email, schema-validated before use | Governed by Anthropic's API data policy for the account's plan; nothing is persisted by Enat on Anthropic's side. The SDK's own logging is disabled in code (`logLevel: 'off'`), so prompts cannot be dumped to stderr by an environment variable. |
-| **Google (Gmail API, OAuth, JWKS)** | OAuth tokens and Gmail API requests for the user's own mailbox, under `gmail.readonly` + `gmail.modify` only | Mailbox data | Google's; the user owns the grant and can revoke it at any time |
+| **Google (Gmail API, OAuth, JWKS)** | OAuth tokens and Gmail API requests for the user's own mailbox, under `gmail.readonly` + `gmail.modify` only | Mailbox data | Google's; the user owns the grant and can revoke it at any time. The Google Cloud SDKs (Firestore, Secret Manager) talk only to Google endpoints: their emulator-redirect and payload-logging environment variables are refused at boot in production (see above). |
 
 ### Logs (Cloud Logging)
 

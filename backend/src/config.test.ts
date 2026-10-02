@@ -80,6 +80,54 @@ describe('loadConfig', () => {
     );
   });
 
+  describe('Google SDK environment hooks', () => {
+    const PRODUCTION = {
+      NODE_ENV: 'production',
+      GCP_PROJECT_ID: 'enat-staging',
+      GOOGLE_OAUTH_AUDIENCE: 'android-client-id.apps.googleusercontent.com',
+    };
+
+    it('refuses GOOGLE_SDK_NODE_LOGGING in production, naming the variable but not its value', () => {
+      const error = (() => {
+        try {
+          loadConfig({ ...PRODUCTION, GOOGLE_SDK_NODE_LOGGING: 'all-the-payloads' });
+          return undefined;
+        } catch (caught) {
+          return caught as ConfigError;
+        }
+      })();
+
+      expect(error).toBeInstanceOf(ConfigError);
+      expect(error?.message).toContain(
+        'GOOGLE_SDK_NODE_LOGGING must not be set when NODE_ENV=production',
+      );
+      expect(error?.message).not.toContain('all-the-payloads');
+    });
+
+    it('refuses FIRESTORE_EMULATOR_HOST in production', () => {
+      expect(() =>
+        loadConfig({ ...PRODUCTION, FIRESTORE_EMULATOR_HOST: 'attacker.example:8080' }),
+      ).toThrow(/FIRESTORE_EMULATOR_HOST must not be set when NODE_ENV=production/);
+    });
+
+    it('refuses GRPC_TRACE in production', () => {
+      expect(() => loadConfig({ ...PRODUCTION, GRPC_TRACE: 'all' })).toThrow(
+        /GRPC_TRACE must not be set when NODE_ENV=production/,
+      );
+    });
+
+    it('allows all three outside production, where the emulator and SDK tracing are tools', () => {
+      expect(() =>
+        loadConfig({
+          NODE_ENV: 'development',
+          GOOGLE_SDK_NODE_LOGGING: 'all',
+          FIRESTORE_EMULATOR_HOST: 'localhost:8080',
+          GRPC_TRACE: 'all',
+        }),
+      ).not.toThrow();
+    });
+  });
+
   it('rejects a RATE_LIMIT_PER_MINUTE that is not a positive integer', () => {
     expect(() => loadConfig({ RATE_LIMIT_PER_MINUTE: '0' })).toThrow(ConfigError);
     expect(() => loadConfig({ RATE_LIMIT_PER_MINUTE: 'sixty' })).toThrow(ConfigError);
