@@ -274,5 +274,17 @@ any access to secrets outside the prefix. The config secrets (`claude-api-key`,
 `google-oauth-client-id`, `google-oauth-client-secret`) stay on their separate
 per-secret `secretAccessor` bindings above and are not reachable through this role.
 
-**3. Cloud Logging and Cloud Trace** are covered by Cloud Run's default runtime grants
-(`roles/logging.logWriter`); nothing to add.
+**3. Logging** needs no role. A custom runtime service account starts with no roles at all,
+and none is needed for logs: Cloud Run itself collects the container's stdout and stderr
+into Cloud Logging, independent of the service account's IAM. (Cloud Trace correlation is
+done by a field in the log line, not by an API call.)
+
+**Verify on staging once billing is restored.** The project-level `secrets.create` grant
+with the prefix condition is the one binding here that is easy to get subtly wrong — the
+condition's project clause, the project *number* versus *id* — and the only way to be sure
+is the first real consent: run the Gmail consent flow for one account and confirm
+`gcloud secrets list --filter="name:gmail-refresh-token-"` shows the new secret and the
+service logged no `PERMISSION_DENIED`. Accepted trade-off: because `secrets.create` is
+granted on the project, the service account can create a secret of *any* name; the
+condition confines what it can then *do* with versions to the `gmail-refresh-token-`
+prefix, which is the part that matters (a stray empty container is noise, not exposure).
