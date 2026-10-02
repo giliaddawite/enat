@@ -29,9 +29,7 @@ function fakeFirestore(seed: Record<string, Record<string, unknown>> = {}): {
               }),
             create: (data) => {
               if (key in documents) {
-                return Promise.reject(
-                  Object.assign(new Error('ALREADY_EXISTS'), { code: 6 }),
-                );
+                return Promise.reject(Object.assign(new Error('ALREADY_EXISTS'), { code: 6 }));
               }
               documents[key] = data;
               return Promise.resolve(undefined);
@@ -91,7 +89,7 @@ describe('createFirestoreUsersRepository', () => {
     expect(documents['users/google-user-123']).toEqual(existing);
   });
 
-  it('resolves a concurrent first-sign-in race to the winner\'s record', async () => {
+  it("resolves a concurrent first-sign-in race to the winner's record", async () => {
     const { firestore, documents } = fakeFirestore();
     const collection = firestore.collection('users');
     const original = collection.doc.bind(collection);
@@ -153,9 +151,7 @@ describe('createFirestoreUsersRepository', () => {
     });
     const repository = createFirestoreUsersRepository(firestore, NOW);
 
-    await expect(repository.findOrCreateByGoogleId(IDENTITY)).rejects.toThrow(
-      /schema validation/,
-    );
+    await expect(repository.findOrCreateByGoogleId(IDENTITY)).rejects.toThrow(/schema validation/);
   });
 
   it('getById returns null for a uid with no stored record', async () => {

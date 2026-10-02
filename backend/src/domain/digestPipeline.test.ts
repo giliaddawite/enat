@@ -290,10 +290,7 @@ describe('createDigestSummarizer', () => {
 
   it('retries once on a malformed reply, echoing it, and uses the retried result', async () => {
     const emails = [email('a')];
-    const { digest, requests, writes } = summarizerWith([
-      'not json at all',
-      replyFor(emails),
-    ]);
+    const { digest, requests, writes } = summarizerWith(['not json at all', replyFor(emails)]);
 
     const result = await digest.summarize(UID, emails);
 

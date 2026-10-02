@@ -322,9 +322,7 @@ describe('gmail ingestion (integration, against the Gmail API mock)', () => {
     server.seed([message('m3'), message('m2'), message('m1')]);
     const { service } = await createHarness(server);
     const synced = await service.syncInbox(UID);
-    const bodyFetchesBefore = server.gmailRequests.filter((path) =>
-      path.includes('/batch'),
-    ).length;
+    const bodyFetchesBefore = server.gmailRequests.filter((path) => path.includes('/batch')).length;
 
     const bodies = await service.fetchBodies(['m2'], 50);
     const emails = attachBodies(synced.emails, bodies);
@@ -351,9 +349,7 @@ describe('gmail ingestion (integration, against the Gmail API mock)', () => {
 
   it('pages through a 10k+ message inbox without holding it in memory at once', async () => {
     const server = createFakeGmail();
-    server.seed(
-      Array.from({ length: 10_500 }, (_, index) => message(`bulk-${10_500 - index}`)),
-    );
+    server.seed(Array.from({ length: 10_500 }, (_, index) => message(`bulk-${10_500 - index}`)));
     const { service } = await createHarness(server, 12_000);
 
     const result = await service.syncInbox(UID);

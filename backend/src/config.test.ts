@@ -40,8 +40,7 @@ describe('loadConfig', () => {
       GOOGLE_OAUTH_CLIENT_ID: 'client-id.apps.googleusercontent.com',
       GOOGLE_OAUTH_CLIENT_SECRET: 'client-secret',
       PUBSUB_PUSH_AUDIENCE: 'https://enat-api-staging.example.run.app/internal/digest-generate',
-      PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL:
-        'enat-scheduler@enat-staging.iam.gserviceaccount.com',
+      PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL: 'enat-scheduler@enat-staging.iam.gserviceaccount.com',
     });
 
     expect(config.claudeApiKey).toBe('sk-ant-example');
@@ -76,9 +75,9 @@ describe('loadConfig', () => {
   });
 
   it('requires GOOGLE_OAUTH_AUDIENCE in production', () => {
-    expect(() =>
-      loadConfig({ NODE_ENV: 'production', GCP_PROJECT_ID: 'enat-staging' }),
-    ).toThrow(/GOOGLE_OAUTH_AUDIENCE is required when NODE_ENV=production/);
+    expect(() => loadConfig({ NODE_ENV: 'production', GCP_PROJECT_ID: 'enat-staging' })).toThrow(
+      /GOOGLE_OAUTH_AUDIENCE is required when NODE_ENV=production/,
+    );
   });
 
   it('rejects a RATE_LIMIT_PER_MINUTE that is not a positive integer', () => {

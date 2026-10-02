@@ -10,11 +10,7 @@ import {
   renderEmailBlock,
   type DigestPrompt,
 } from './summarizationPrompt.js';
-import {
-  EMAIL_CATEGORIES,
-  type CacheableEmailSummary,
-  type EmailSummary,
-} from './summary.js';
+import { EMAIL_CATEGORIES, type CacheableEmailSummary, type EmailSummary } from './summary.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -253,9 +249,7 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
    * fallback — a digest built from heuristic categories still reaches the user, and the
    * uncached emails are retried by the next digest run.
    */
-  async function summarizeBatch(
-    emails: readonly Email[],
-  ): Promise<ReadonlyMap<string, LlmItem>> {
+  async function summarizeBatch(emails: readonly Email[]): Promise<ReadonlyMap<string, LlmItem>> {
     const requestedIds = new Set(emails.map((email) => email.id));
     const maxOutputTokens = Math.min(
       MAX_OUTPUT_TOKENS_PER_DIGEST,
@@ -279,9 +273,13 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
         emailCount: emails.length,
         promptVersion: PROMPT_VERSION,
       });
-      const retried = parseLlmBatchResponse(await attempt(buildRetryPrompt(prompt, reply)), requestedIds, {
-        allowPartialCoverage: true,
-      });
+      const retried = parseLlmBatchResponse(
+        await attempt(buildRetryPrompt(prompt, reply)),
+        requestedIds,
+        {
+          allowPartialCoverage: true,
+        },
+      );
       if (retried.kind === 'parsed') {
         if (retried.items.size < requestedIds.size) {
           deps.logger?.warn('digest batch retry left emails uncovered', {
@@ -328,7 +326,10 @@ export function createDigestSummarizer(deps: DigestSummarizerDependencies): Dige
 
   return {
     async summarize(uid, emails) {
-      const cached = await readCache(uid, emails.map((email) => email.id));
+      const cached = await readCache(
+        uid,
+        emails.map((email) => email.id),
+      );
       const uncached = emails.filter((email) => !cached.has(email.id));
       const plan = planDigestBatch(uncached, maxInputTokens);
 

@@ -29,10 +29,7 @@ function loadJson<T>(name: string): T {
 
 const emails = loadJson<Email[]>('digestEmails.json');
 const bodies = loadJson<Record<string, string>>('digestBodies.json');
-const claudeReply = readFileSync(
-  new URL('./goldens/claudeReply.json', import.meta.url),
-  'utf8',
-);
+const claudeReply = readFileSync(new URL('./goldens/claudeReply.json', import.meta.url), 'utf8');
 const expectedSummaries = loadJson<EmailSummary[]>('expectedSummaries.json');
 
 const TODAY = '2026-08-25';
@@ -52,8 +49,7 @@ function goldenSummarizer() {
   const digest = createDigestSummarizer({
     summarizer,
     cache: emptyCache,
-    fetchBodies: (ids) =>
-      Promise.resolve(new Map(ids.map((id) => [id, bodies[id] ?? '']))),
+    fetchBodies: (ids) => Promise.resolve(new Map(ids.map((id) => [id, bodies[id] ?? '']))),
     today: () => TODAY,
     nonce: () => 'goldnonce',
   });
@@ -86,14 +82,13 @@ describe('digest pipeline goldens', () => {
     const heaviest = Math.max(
       ...emails.map(
         (email) =>
-          estimateTokens(renderEmailBlock({ ...email, bodyText: null, snippet: '' }, 0, 'nnnnnnnn')) +
-          BODY_TOKENS_PER_EMAIL,
+          estimateTokens(
+            renderEmailBlock({ ...email, bodyText: null, snippet: '' }, 0, 'nnnnnnnn'),
+          ) + BODY_TOKENS_PER_EMAIL,
       ),
     );
     // The cost math in docs/digest-cost.md assumes 50 typical emails fit under the cap.
-    expect(PROMPT_OVERHEAD_TOKENS + 50 * heaviest).toBeLessThanOrEqual(
-      MAX_INPUT_TOKENS_PER_DIGEST,
-    );
+    expect(PROMPT_OVERHEAD_TOKENS + 50 * heaviest).toBeLessThanOrEqual(MAX_INPUT_TOKENS_PER_DIGEST);
   });
 
   it('keeps the worst-case digest at or under the $0.05 budget on Haiku pricing', async () => {

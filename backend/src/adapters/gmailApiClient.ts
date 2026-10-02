@@ -334,9 +334,7 @@ export function createGmailApiClient(options: GmailApiClientOptions): GmailMailb
 
 /** Walks the MIME tree collecting decoded `text/*` leaves in document order. Attachments
  * and images are skipped — they are never summarized and must never be buffered. */
-function flattenTextParts(
-  root: RawMessagePart | undefined,
-): { mimeType: string; text: string }[] {
+function flattenTextParts(root: RawMessagePart | undefined): { mimeType: string; text: string }[] {
   const collected: { mimeType: string; text: string }[] = [];
   const walk = (part: RawMessagePart): void => {
     const mimeType = part.mimeType ?? '';

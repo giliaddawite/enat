@@ -57,7 +57,12 @@ describe('retryWithBackoff', () => {
   it('returns the first successful result without sleeping', async () => {
     const { sleeps, schedule } = recordingSchedule();
 
-    const result = await retryWithBackoff(() => Promise.resolve('ok'), () => true, POLICY, schedule);
+    const result = await retryWithBackoff(
+      () => Promise.resolve('ok'),
+      () => true,
+      POLICY,
+      schedule,
+    );
 
     expect(result).toBe('ok');
     expect(sleeps).toEqual([]);

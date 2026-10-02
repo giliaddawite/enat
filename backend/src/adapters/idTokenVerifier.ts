@@ -116,11 +116,9 @@ export function createGoogleIdTokenVerifier(
       const payload = await verifyClaims(idToken, jwks, options.audience);
       const claims = GoogleIdTokenClaims.safeParse(payload);
       if (!claims.success) {
-        throw new IdTokenRejectedError(
-          'invalid_claims',
-          'ID token payload failed validation',
-          { cause: claims.error },
-        );
+        throw new IdTokenRejectedError('invalid_claims', 'ID token payload failed validation', {
+          cause: claims.error,
+        });
       }
       return {
         googleUserId: claims.data.sub,

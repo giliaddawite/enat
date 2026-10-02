@@ -17,7 +17,13 @@ afterEach(async () => {
 });
 
 function userRecord(uid: string): User {
-  return { uid, email: `${uid}@example.com`, createdAt: '2026-08-17T12:00:00.000Z', locale: 'am', refreshTokenRef: null };
+  return {
+    uid,
+    email: `${uid}@example.com`,
+    createdAt: '2026-08-17T12:00:00.000Z',
+    locale: 'am',
+    refreshTokenRef: null,
+  };
 }
 
 /** Stands in for `authenticate`: reads the requested uid from a header instead of a token,

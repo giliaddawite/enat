@@ -291,9 +291,7 @@ describe('getMessagesMetadata', () => {
   });
 
   it('throws on a non-retryable per-item status', async () => {
-    const script = scriptedFetch([
-      () => batchResponse([['m1', 404, { error: { code: 404 } }]]),
-    ]);
+    const script = scriptedFetch([() => batchResponse([['m1', 404, { error: { code: 404 } }]])]);
 
     await expect(client(script).getMessagesMetadata(['m1'])).rejects.toMatchObject({
       status: 404,

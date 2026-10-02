@@ -4,9 +4,10 @@ import { createGmailAccessTokenProvider } from './gmailAccessTokens.js';
 
 const REF = 'projects/enat/secrets/gmail-refresh-token-uid/versions/1';
 
-function fakeTokenEndpoint(
-  responses: (() => Response)[],
-): { fetchImpl: typeof fetch; requests: { url: string; body: string }[] } {
+function fakeTokenEndpoint(responses: (() => Response)[]): {
+  fetchImpl: typeof fetch;
+  requests: { url: string; body: string }[];
+} {
   const requests: { url: string; body: string }[] = [];
   const fetchImpl = ((input: string | URL | Request, init?: RequestInit) => {
     requests.push({
@@ -106,9 +107,7 @@ describe('createGmailAccessTokenProvider', () => {
       now: () => 0,
     });
 
-    const error = (await provider
-      .getAccessToken(REF)
-      .catch((caught: unknown) => caught)) as Error;
+    const error = (await provider.getAccessToken(REF).catch((caught: unknown) => caught)) as Error;
 
     expect(error.message).toContain('status 401');
     expect(error.message).not.toContain('refresh-token-secret');
@@ -117,7 +116,10 @@ describe('createGmailAccessTokenProvider', () => {
 
   it('maps invalid_grant to GmailReconnectRequiredError so callers can prompt re-consent', async () => {
     const { fetchImpl } = fakeTokenEndpoint([
-      () => new Response('{"error":"invalid_grant","error_description":"Token has been revoked."}', { status: 400 }),
+      () =>
+        new Response('{"error":"invalid_grant","error_description":"Token has been revoked."}', {
+          status: 400,
+        }),
     ]);
     const provider = createGmailAccessTokenProvider({
       refreshTokenStore,
@@ -127,9 +129,7 @@ describe('createGmailAccessTokenProvider', () => {
       now: () => 0,
     });
 
-    const error = (await provider
-      .getAccessToken(REF)
-      .catch((caught: unknown) => caught)) as Error;
+    const error = (await provider.getAccessToken(REF).catch((caught: unknown) => caught)) as Error;
 
     expect(error).toBeInstanceOf(GmailReconnectRequiredError);
     expect(error.message).not.toContain('refresh-token-secret');
@@ -147,9 +147,7 @@ describe('createGmailAccessTokenProvider', () => {
       now: () => 0,
     });
 
-    const error = (await provider
-      .getAccessToken(REF)
-      .catch((caught: unknown) => caught)) as Error;
+    const error = (await provider.getAccessToken(REF).catch((caught: unknown) => caught)) as Error;
 
     expect(error).not.toBeInstanceOf(GmailReconnectRequiredError);
     expect(error.message).toContain('status 502');

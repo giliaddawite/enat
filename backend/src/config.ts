@@ -152,10 +152,7 @@ function nonBlank(raw: string | undefined): string | undefined {
 }
 
 /** Comma separated so a client ID rotation can add the new value before removing the old. */
-function parseAudience(
-  raw: string | undefined,
-  problems: string[],
-): readonly string[] | undefined {
+function parseAudience(raw: string | undefined, problems: string[]): readonly string[] | undefined {
   if (raw === undefined || raw.trim() === '') {
     return undefined;
   }
