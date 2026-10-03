@@ -62,8 +62,9 @@ export function buildAppDependencies(config: Config, logger: Logger): AppDepende
   const firestore = createFirestoreClient(config.gcpProjectId);
   const usersRepository = createFirestoreUsersRepository(firestore);
   const digests = createFirestoreDigestStore(firestore, { logger });
-  // One shared Google JWKS cache for every verifier this process builds — sign-in and the
-  // consent id_token check hit the same key set, so there is no reason to fetch it twice.
+  // One shared Google JWKS cache for every verifier this process builds — sign-in, the
+  // consent id_token check and the Pub/Sub push verifier all hit the same key set, so there
+  // is no reason to fetch it more than once.
   const googleJwks = createGoogleJwks();
   const gmailOAuth = buildGmailOAuthAdapters(config, logger, googleJwks);
   const digestGeneration = createDigestGenerationService({
@@ -73,7 +74,7 @@ export function buildAppDependencies(config: Config, logger: Logger): AppDepende
     logger,
   });
 
-  const digestGenerationPush = pubSubPushDependencies(config);
+  const digestGenerationPush = pubSubPushDependencies(config, googleJwks);
 
   return {
     config,
@@ -274,8 +275,16 @@ function buildDigestUserPipeline(
   };
 }
 
-function pubSubPushDependencies(
+/**
+ * The Pub/Sub push verifier's dependencies (TICKET-105), or `undefined` when the push
+ * subscription is not configured and `/internal/digest-generate` must not be mounted. The
+ * verifier is built on the process-wide `googleJwks` rather than a key set of its own: a
+ * push token is signed by the same Google keys as a sign-in token, and a second cache would
+ * mean a second JWKS fetch for nothing. Exported for `composition.test.ts`.
+ */
+export function pubSubPushDependencies(
   config: Config,
+  googleJwks: ReturnType<typeof createGoogleJwks>,
 ): { idTokenVerifier: IdTokenVerifier; allowedInvokerEmail: string } | undefined {
   if (
     config.pubSubPushAudience === undefined ||
@@ -284,7 +293,10 @@ function pubSubPushDependencies(
     return undefined;
   }
   return {
-    idTokenVerifier: createGoogleIdTokenVerifier({ audience: [config.pubSubPushAudience] }),
+    idTokenVerifier: createGoogleIdTokenVerifier({
+      audience: [config.pubSubPushAudience],
+      jwks: googleJwks,
+    }),
     allowedInvokerEmail: config.pubSubInvokerServiceAccountEmail,
   };
 }
