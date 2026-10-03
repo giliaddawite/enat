@@ -9,6 +9,7 @@ import {
   AuthCodeExchangeUnavailableError,
   GmailConsentRejectedError,
 } from '../domain/gmailConsent.js';
+import { SingleFlightTimeoutError } from '../domain/singleFlight.js';
 import { VerseDatasetError } from '../domain/verse.js';
 import { describeForeignError } from '../logging/foreignError.js';
 import type { LogFields } from '../logging/logger.js';
@@ -33,6 +34,7 @@ const OWN_ERROR_CLASSES: readonly (abstract new (...args: never[]) => Error)[] =
   GmailConsentRejectedError,
   AuthCodeExchangeUnavailableError,
   VerseDatasetError,
+  SingleFlightTimeoutError,
 ];
 
 /**

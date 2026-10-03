@@ -10,6 +10,7 @@ import {
   type DigestUserPipeline,
 } from './digestGeneration.js';
 import type { DigestSummarizer } from './digestPipeline.js';
+import { SingleFlightTimeoutError } from './singleFlight.js';
 import type { Email } from './email.js';
 import type { GmailSyncService } from './gmailSync.js';
 import type { User } from './user.js';
@@ -319,5 +320,32 @@ describe('withSingleFlightPerUser', () => {
     expect(joins).toHaveLength(1);
     expect(joins[0]).toMatchObject({ severity: 'INFO', uid: 'uid-1' });
     expect(Object.keys(joins[0] ?? {})).not.toContain('digest');
+  });
+
+  it('releases the waiters of a hung run at the deadline and lets the next call start afresh', async () => {
+    const armed: (() => void)[] = [];
+    const generate = vi
+      .fn<(user: User) => Promise<DigestGenerationResult>>()
+      .mockImplementationOnce(() => new Promise<DigestGenerationResult>(() => undefined))
+      .mockResolvedValueOnce(RESULT);
+    const guarded = withSingleFlightPerUser(
+      { generate },
+      {
+        timeoutMs: 50_000,
+        setTimer: (callback) => armed.push(callback),
+        clearTimer: () => undefined,
+      },
+    );
+
+    const first = guarded.generate(USER);
+    const second = guarded.generate(USER);
+    for (const fire of armed.splice(0)) {
+      fire();
+    }
+
+    await expect(first).rejects.toBeInstanceOf(SingleFlightTimeoutError);
+    await expect(second).rejects.toBeInstanceOf(SingleFlightTimeoutError);
+    await expect(guarded.generate(USER)).resolves.toEqual(RESULT);
+    expect(generate).toHaveBeenCalledTimes(2);
   });
 });

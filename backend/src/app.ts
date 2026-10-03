@@ -72,6 +72,10 @@ export interface AppDependencies {
   };
 }
 
+/** Under `timeoutSeconds: 60` in infra/cloudrun/service.staging.yaml — see the guard in
+ * `createApp` for why a generation run is abandoned by its waiters before then. */
+const GENERATION_IN_FLIGHT_TIMEOUT_MS = 50_000;
+
 /**
  * Assembles the middleware chain. Order matters: an id exists before anything logs, and
  * every response — including unmatched routes — leaves through errorHandler.
@@ -113,8 +117,13 @@ export function createApp(dependencies: AppDependencies): Express {
 
   // One in-flight guard shared by the app's on-demand route and the scheduler's push, so
   // the two colliding (a pull-to-refresh during the morning run) is one pipeline run, not
-  // two Gmail syncs and two Claude calls.
-  const generation = withSingleFlightPerUser(digestGeneration, { logger });
+  // two Gmail syncs and two Claude calls. The deadline sits under Cloud Run's 60s request
+  // timeout: a stalled run is abandoned by its waiters before the platform cuts them off,
+  // and the next caller starts afresh instead of joining it.
+  const generation = withSingleFlightPerUser(digestGeneration, {
+    logger,
+    timeoutMs: GENERATION_IN_FLIGHT_TIMEOUT_MS,
+  });
 
   const v1 = Router();
   v1.use(authenticate({ idTokenVerifier, usersRepository }));
