@@ -510,7 +510,12 @@ describe('POST /internal/digest-generate', () => {
     const pushInside = new Promise<void>((resolve) => {
       release = resolve;
     });
+    let generateStarted: () => void = () => undefined;
+    const appRunStarted = new Promise<void>((resolve) => {
+      generateStarted = resolve;
+    });
     const generate = vi.fn(async () => {
+      generateStarted();
       await pushInside;
       return { digest: DIGEST, persisted: true };
     });
@@ -526,7 +531,7 @@ describe('POST /internal/digest-generate', () => {
     });
 
     const appCall = running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
-    await vi.waitFor(() => expect(generate).toHaveBeenCalledTimes(1));
+    await appRunStarted;
     const push = running.fetch('/internal/digest-generate', jsonPost(envelope, 'scheduler-token'));
     const [appResponse, pushResponse] = await Promise.all([appCall, push]);
 
