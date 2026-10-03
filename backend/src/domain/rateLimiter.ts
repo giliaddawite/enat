@@ -27,10 +27,13 @@ interface Window {
  * household's traffic never approaches a boundary-doubling edge case in practice.
  *
  * Known limitations, accepted for now and worth a follow-up ticket if the user base grows:
- * - State is per-process. Multiple Cloud Run instances each grant a full budget, and a
- *   cold start resets it — under-enforcement, never over-enforcement. The real fix is a
- *   shared store (e.g. Firestore counter), which costs a write per request; not worth it
- *   to protect one household's Claude budget.
+ * - State is per-process. Every Cloud Run instance would grant a full budget, which is why
+ *   the deployment pins `maxScale: '1'` (TICKET-306; `infra/README.md` records the
+ *   decision and `http/rateLimit.deployment.test.ts` keeps the manifest in step). A cold
+ *   start still resets the window — under-enforcement, never over-enforcement. Serving many
+ *   users means a shared store (a Firestore counter per user per window) before raising
+ *   `maxScale`; that costs a write per request, not worth it to protect one household's
+ *   Claude budget.
  */
 export function createRateLimiter(options: RateLimiterOptions): RateLimiter {
   const now = options.now ?? Date.now;

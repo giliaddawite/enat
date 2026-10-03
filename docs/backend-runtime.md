@@ -11,8 +11,13 @@ Run keeps no idle instance, so an idle service bills nothing beyond image storag
 serves one household; idle is its normal state, and a warm minimum instance would dominate
 the bill.
 
-Two supporting decisions:
+Three supporting decisions:
 
+- **At most one instance.** `autoscaling.knative.dev/maxScale: '1'` (TICKET-306). One
+  household never needs a second instance, and the per-user rate limiter keeps its window
+  in process memory, so a single instance is what makes the documented 60 req/min the
+  enforced figure — see [`infra/README.md`](../infra/README.md) for what would have to
+  change before raising it.
 - **CPU is throttled outside requests.** `run.googleapis.com/cpu-throttling: 'true'` bills
   CPU only while a request is in flight. This matches the platform default and is pinned
   anyway, because it is the single setting that separates a near-zero bill from a real one:

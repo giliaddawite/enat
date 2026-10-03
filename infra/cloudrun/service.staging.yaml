@@ -24,8 +24,13 @@ spec:
         # Scale to zero when idle: no instance, no charge. This is the cost control for a
         # service whose real traffic is one household.
         autoscaling.knative.dev/minScale: '0'
-        # Cap the blast radius of a traffic spike or a retry storm on the Claude API budget.
-        autoscaling.knative.dev/maxScale: '3'
+        # Exactly one instance, by design (TICKET-306). The per-user rate limiter keeps its
+        # window in process memory, so every extra instance would grant the user another
+        # full 60 req/min — with one instance the documented figure is the enforced one.
+        # Also caps the blast radius of a retry storm on the Claude API budget. Raising this
+        # requires a shared (Firestore-backed) limiter first; see infra/README.md. A test
+        # in backend/src/http/rateLimit.deployment.test.ts pins this value.
+        autoscaling.knative.dev/maxScale: '1'
         # Cold start mitigation: full CPU during container startup, billed only for that
         # startup time.
         run.googleapis.com/startup-cpu-boost: 'true'

@@ -66,6 +66,35 @@ IAM gate in front of the token check at the cost of a second service to deploy a
 monitor. It is not done today because the token check is already a complete
 authentication of the caller, and one service is cheaper to run at zero.
 
+## One instance, and why the rate limiter depends on it (TICKET-306)
+
+`service.staging.yaml` pins `autoscaling.knative.dev/maxScale: '1'`. This is a deliberate
+choice, not an oversight, and the per-user rate limiter relies on it:
+
+- `createRateLimiter` (`backend/src/domain/rateLimiter.ts`) keeps each user's request
+  window in **process memory**. Every Cloud Run instance therefore grants its own full
+  budget, and a client whose requests land on N instances gets N × 60 req/min. With
+  `maxScale: 1` there is exactly one window per user, so the 60 req/min figure in CLAUDE.md
+  is the figure the deployed service enforces.
+- The service serves one household. `containerConcurrency: 80` on a single instance is far
+  more than that household's traffic, so the pin costs nothing in capacity; a second
+  instance would only ever appear during a cold-start overlap or a retry storm — exactly
+  the moments the budget exists to bound.
+- A cold start still resets the window (under-enforcement for one minute, never
+  over-enforcement). Accepted: the limiter protects a budget, not a security boundary.
+
+`backend/src/http/rateLimit.deployment.test.ts` reads every `cloudrun/service.*.yaml` and
+fails if `maxScale` is anything but `'1'`, so the manifest and the limiter cannot drift
+apart without someone changing both on purpose.
+
+**If the app ever serves many users** and one instance is no longer enough, raising
+`maxScale` must be preceded by replacing the limiter's window with a shared store: a
+Firestore-backed window keyed by `uid` (one document per user per window, incremented with
+a transaction or `FieldValue.increment`, with `expireAt` under a TTL policy like the other
+collections above). That costs one Firestore write per request, which is why it is not done
+for one household today. The `RateLimiter` port (`tryConsume(key)`) is already the seam; the
+HTTP middleware and routes would not change.
+
 ## Prerequisites not yet in place
 
 - **TICKET-003** — GCP projects, service accounts, Artifact Registry repository.
