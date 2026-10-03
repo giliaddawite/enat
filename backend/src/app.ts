@@ -116,11 +116,15 @@ export function createApp(dependencies: AppDependencies): Express {
 
   // Not behind /v1's Google end-user auth: the caller is Pub/Sub, not the app, and its own
   // OIDC token is verified by verifyPubSubPush. See the AppDependencies doc comment above.
+  // Verification runs before the body parser on purpose: the token is in the Authorization
+  // header, so an unauthenticated caller is answered without this service ever reading or
+  // parsing what it sent. The limit is small because a push envelope is a base64 `{"uid"}`
+  // payload plus Pub/Sub's message metadata — anything larger is not a scheduler push.
   if (digestGenerationPush !== undefined) {
     app.post(
       '/internal/digest-generate',
-      express.json(),
       verifyPubSubPush(digestGenerationPush),
+      express.json({ limit: '16kb' }),
       createDigestGenerationPushHandler({
         getUser: (uid) => usersRepository.getById(uid),
         generation: digestGeneration,

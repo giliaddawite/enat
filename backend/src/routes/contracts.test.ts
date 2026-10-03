@@ -473,6 +473,32 @@ describe('POST /internal/digest-generate', () => {
     expect((await bodyOf(response, ErrorResponse)).error.code).toBe('unauthorized');
   });
 
+  it('rejects an unauthenticated push before reading its body — malformed JSON still gets the 401, not a 400', async () => {
+    const running = await serve();
+
+    const response = await running.fetch('/internal/digest-generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"message": not json at all',
+    });
+
+    expect(response.status).toBe(401);
+    expect((await bodyOf(response, ErrorResponse)).error.code).toBe('unauthorized');
+  });
+
+  it('answers an authenticated push whose body exceeds the 16kb limit with 413 in the error envelope', async () => {
+    const running = await serve();
+    const oversized = JSON.stringify({ message: { data: 'A'.repeat(17_000) } });
+
+    const response = await running.fetch(
+      '/internal/digest-generate',
+      jsonPost(oversized, 'scheduler-token'),
+    );
+
+    expect(response.status).toBe(413);
+    await bodyOf(response, ErrorResponse);
+  });
+
   it("answers a push carrying the app user's token with 403 in the error envelope", async () => {
     const running = await serve();
 

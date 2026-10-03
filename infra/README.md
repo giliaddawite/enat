@@ -50,7 +50,10 @@ makes the application-layer checks the entire boundary — there is no IAM gate 
   `email` required to equal `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL` — the one service
   account the push subscription is configured to sign as. An arbitrary caller cannot obtain
   such a token, because only that service account's key can mint one with that audience.
-  The route is not mounted at all when either variable is unset.
+  The check runs before the request body is parsed (the token is a header), and the body
+  parser that follows it accepts at most 16kb — an unauthenticated caller never gets this
+  service to read, let alone parse, what it sent. The route is not mounted at all when
+  either variable is unset.
 - **`/healthz`** is open and dependency-free, for Cloud Run's startup probe.
 - Everything else — unmatched paths included — leaves through `notFound` and the error
   handler, which never include detail.
