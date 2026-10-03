@@ -195,12 +195,18 @@ gcloud pubsub topics create enat-digest-generate --project PROJECT_ID
 # The push subscription. --push-auth-token-audience is the URL PUBSUB_PUSH_AUDIENCE must be
 # set to on the Cloud Run service (see .env.example) — verifyPubSubPush checks the pushed
 # OIDC token's `aud` claim against exactly this value.
+# --ack-deadline matches the service's timeoutSeconds: 60 — a generation run (Gmail sync plus
+# a Claude call) routinely exceeds Pub/Sub's 10s default, which would redeliver the message
+# mid-run and start a second, paid run. --min-retry-delay spaces out retries of a genuine
+# 5xx so a hiccup is not hammered.
 gcloud pubsub subscriptions create enat-digest-generate-push \
   --project PROJECT_ID \
   --topic enat-digest-generate \
   --push-endpoint "https://<staging-service-url>/internal/digest-generate" \
   --push-auth-service-account "enat-scheduler@PROJECT_ID.iam.gserviceaccount.com" \
-  --push-auth-token-audience "https://<staging-service-url>/internal/digest-generate"
+  --push-auth-token-audience "https://<staging-service-url>/internal/digest-generate" \
+  --ack-deadline 60 \
+  --min-retry-delay 10s
 
 # 6:30 AM America/New_York, daily. The message body is the one piece of per-user state this
 # single-tenant deployment needs: the Google user id (Firestore `users` document id) to
