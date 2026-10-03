@@ -122,6 +122,7 @@ async function serveWithService(
       idTokenVerifier,
       usersRepository,
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
+      digestGenerateRateLimiter: createRateLimiter({ limit: 2, windowMs: 60_000, now: () => 0 }),
       digests,
       digestGeneration,
       gmailConsent: consent,

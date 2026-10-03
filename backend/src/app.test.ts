@@ -68,6 +68,7 @@ async function serve() {
       idTokenVerifier: stubVerifier,
       usersRepository: stubUsersRepository,
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
+      digestGenerateRateLimiter: createRateLimiter({ limit: 2, windowMs: 60_000, now: () => 0 }),
       digests: stubDigests,
       digestGeneration: stubDigestGeneration,
       gmailConsent: stubGmailConsent,

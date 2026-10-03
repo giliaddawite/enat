@@ -91,6 +91,10 @@ export function buildAppDependencies(config: Config, logger: Logger): AppDepende
       limit: config.rateLimitPerMinute,
       windowMs: RATE_LIMIT_WINDOW_MS,
     }),
+    digestGenerateRateLimiter: createRateLimiter({
+      limit: config.digestGenerateRateLimitPerMinute,
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    }),
     digests,
     digestGeneration,
     gmailConsent: buildGmailConsentService(gmailOAuth, usersRepository, logger),

@@ -8,6 +8,7 @@ describe('loadConfig', () => {
       environment: 'development',
       logLevel: 'info',
       rateLimitPerMinute: 60,
+      digestGenerateRateLimitPerMinute: 2,
     });
   });
 
@@ -20,6 +21,7 @@ describe('loadConfig', () => {
         GCP_PROJECT_ID: 'enat-staging',
         GOOGLE_OAUTH_AUDIENCE: 'android-client-id.apps.googleusercontent.com',
         RATE_LIMIT_PER_MINUTE: '30',
+        DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE: '5',
       }),
     ).toEqual({
       port: 3000,
@@ -28,6 +30,7 @@ describe('loadConfig', () => {
       gcpProjectId: 'enat-staging',
       googleOAuthAudience: ['android-client-id.apps.googleusercontent.com'],
       rateLimitPerMinute: 30,
+      digestGenerateRateLimitPerMinute: 5,
     });
   });
 
@@ -131,6 +134,11 @@ describe('loadConfig', () => {
   it('rejects a RATE_LIMIT_PER_MINUTE that is not a positive integer', () => {
     expect(() => loadConfig({ RATE_LIMIT_PER_MINUTE: '0' })).toThrow(ConfigError);
     expect(() => loadConfig({ RATE_LIMIT_PER_MINUTE: 'sixty' })).toThrow(ConfigError);
+  });
+
+  it('rejects a DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE that is not a positive integer', () => {
+    expect(() => loadConfig({ DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE: '0' })).toThrow(ConfigError);
+    expect(() => loadConfig({ DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE: 'two' })).toThrow(ConfigError);
   });
 
   it('rejects a PORT that is not a valid TCP port', () => {

@@ -26,6 +26,14 @@ export interface AppDependencies {
   readonly idTokenVerifier: IdTokenVerifier;
   readonly usersRepository: UsersRepository;
   readonly rateLimiter: RateLimiter;
+  /**
+   * The separate, smaller budget for `POST /v1/digest/generate` (TICKET-306). A generate
+   * call is billed in Gmail and Claude requests, so it draws from this limiter *and* the
+   * shared `rateLimiter` — the read budget stays intact when generation is exhausted, and
+   * generation can never spend the whole read budget. `config.digestGenerateRateLimitPerMinute`
+   * sets its size (default 2/min).
+   */
+  readonly digestGenerateRateLimiter: RateLimiter;
   readonly digests: DigestStore;
   readonly digestGeneration: DigestGenerationService;
   /**
@@ -77,6 +85,7 @@ export function createApp(dependencies: AppDependencies): Express {
     idTokenVerifier,
     usersRepository,
     rateLimiter,
+    digestGenerateRateLimiter,
     digests,
     digestGeneration,
     gmailConsent,
@@ -103,7 +112,13 @@ export function createApp(dependencies: AppDependencies): Express {
   v1.use(rateLimit({ rateLimiter }));
   const digestRouteDependencies = { digests, generation: digestGeneration, now, logger };
   v1.get('/digest', getDigest(digestRouteDependencies));
-  v1.post('/digest/generate', generateDigest(digestRouteDependencies));
+  // The router-level limiter has already taken one unit of the read budget by the time this
+  // runs; the second limiter is the generate-specific budget on top of it.
+  v1.post(
+    '/digest/generate',
+    rateLimit({ rateLimiter: digestGenerateRateLimiter }),
+    generateDigest(digestRouteDependencies),
+  );
   // Body parsing only on the one route that takes a body. The limit is deliberately tiny:
   // the body is a single OAuth auth code, so anything larger is not a consent request.
   v1.post(

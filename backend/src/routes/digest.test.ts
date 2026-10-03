@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IdTokenRejectedError, type IdTokenVerifier } from '../adapters/idTokenVerifier.js';
 import type { UsersRepository } from '../adapters/usersRepository.js';
 import { createApp } from '../app.js';
@@ -96,7 +96,11 @@ function fakeGeneration(
   };
 }
 
-async function serve(deps: { digests: DigestStore; digestGeneration: DigestGenerationService }) {
+async function serve(deps: {
+  digests: DigestStore;
+  digestGeneration: DigestGenerationService;
+  generatesPerMinute?: number;
+}) {
   const logs = captureLogs();
   const config = loadConfig({ NODE_ENV: 'test' });
   server = await startTestServer(
@@ -106,10 +110,16 @@ async function serve(deps: { digests: DigestStore; digestGeneration: DigestGener
       idTokenVerifier,
       usersRepository,
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
+      digestGenerateRateLimiter: createRateLimiter({
+        limit: deps.generatesPerMinute ?? 2,
+        windowMs: 60_000,
+        now: () => 0,
+      }),
+      digests: deps.digests,
+      digestGeneration: deps.digestGeneration,
       now: NOW,
       verses: { verseFor: () => FALLBACK_VERSE },
       gmailConsent: { connect: () => Promise.reject(new Error('not exercised by these tests')) },
-      ...deps,
     }),
   );
   return server;
@@ -302,5 +312,37 @@ describe('POST /v1/digest/generate', () => {
     expect(response.status).toBe(500);
     const body = (await response.json()) as { error: { message: string } };
     expect(body.error.message).not.toContain('claude api on fire');
+  });
+
+  it('has its own budget: the call past the generate limit is 429 while the read budget is far from spent', async () => {
+    const generate = vi.fn(() => Promise.resolve({ digest: DIGEST, persisted: true }));
+    const running = await serve({
+      digests: fakeDigests(),
+      digestGeneration: { generate },
+      generatesPerMinute: 2,
+    });
+
+    const first = await running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+    const second = await running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+    const third = await running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+
+    expect([first.status, second.status, third.status]).toEqual([200, 200, 429]);
+    expect(await third.json()).toMatchObject({ error: { code: 'too_many_requests' } });
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves GET /v1/digest served once the generate budget is exhausted', async () => {
+    const running = await serve({
+      digests: fakeDigests([DIGEST]),
+      digestGeneration: fakeGeneration({ digest: DIGEST, persisted: true }),
+      generatesPerMinute: 1,
+    });
+    await running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+    const exhausted = await running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+
+    const read = await running.fetch('/v1/digest', AUTH);
+
+    expect(exhausted.status).toBe(429);
+    expect(read.status).toBe(200);
   });
 });

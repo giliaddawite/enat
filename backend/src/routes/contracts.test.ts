@@ -155,6 +155,7 @@ async function serve(overrides: Overrides = {}): Promise<TestServer> {
         windowMs: 60_000,
         now: () => 0,
       }),
+      digestGenerateRateLimiter: createRateLimiter({ limit: 2, windowMs: 60_000, now: () => 0 }),
       digests: overrides.digests ?? storeWith([]),
       digestGeneration: overrides.digestGeneration ?? generation(DIGEST),
       gmailConsent: overrides.gmailConsent ?? consent(undefined),
