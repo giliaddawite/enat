@@ -1,6 +1,10 @@
 import type * as AnthropicSdk from '@anthropic-ai/sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createClaudeSummarizer, DEFAULT_CLAUDE_MODEL } from './claudeClient.js';
+import {
+  createClaudeSummarizer,
+  DEFAULT_CLAUDE_MODEL,
+  DEFAULT_CLAUDE_TIMEOUT_MS,
+} from './claudeClient.js';
 
 /** Every options object the SDK client was constructed with, recorded by the wrapper below. */
 const constructed = vi.hoisted(() => ({ options: [] as Record<string, unknown>[] }));
@@ -74,6 +78,22 @@ describe('createClaudeSummarizer', () => {
       baseURL: 'https://api.anthropic.com',
       logLevel: 'off',
     });
+  });
+
+  it('caps each request attempt under the Cloud Run request timeout, leaving the SDK retry count alone', () => {
+    createClaudeSummarizer({ apiKey: 'test-key' });
+
+    expect(DEFAULT_CLAUDE_TIMEOUT_MS).toBeLessThan(60_000);
+    expect(constructed.options[0]).toMatchObject({
+      timeout: DEFAULT_CLAUDE_TIMEOUT_MS,
+      maxRetries: 2,
+    });
+  });
+
+  it('honours a configured request timeout', () => {
+    createClaudeSummarizer({ apiKey: 'test-key', timeoutMs: 5_000 });
+
+    expect(constructed.options[0]).toMatchObject({ timeout: 5_000 });
   });
 
   it('sends prompts to api.anthropic.com even when ANTHROPIC_BASE_URL points elsewhere', async () => {
