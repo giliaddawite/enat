@@ -131,7 +131,10 @@ export function createApp(dependencies: AppDependencies): Express {
   const digestRouteDependencies = { digests, generation, now, logger };
   v1.get('/digest', getDigest(digestRouteDependencies));
   // The router-level limiter has already taken one unit of the read budget by the time this
-  // runs; the second limiter is the generate-specific budget on top of it.
+  // runs; the second limiter is the generate-specific budget on top of it. So a generate
+  // request always costs one unit of the shared 60/min budget, even when the generate
+  // limiter then refuses it with 429 — acceptable for one user, whose refreshes number in
+  // the handful per day, and simpler than exempting one route from the router-level guard.
   v1.post(
     '/digest/generate',
     rateLimit({ rateLimiter: digestGenerateRateLimiter }),
