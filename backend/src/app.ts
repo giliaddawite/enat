@@ -19,7 +19,10 @@ import { rateLimit } from './http/rateLimit.js';
 import { requestId } from './http/requestId.js';
 import { requestLogging } from './http/requestLogging.js';
 import { generateDigest, getDigest } from './routes/digest.js';
-import { createDigestGenerationPushHandler } from './routes/digestGenerationPush.js';
+import {
+  ackUnparseablePushBody,
+  createDigestGenerationPushHandler,
+} from './routes/digestGenerationPush.js';
 import { connectGmail } from './routes/gmailConsent.js';
 import { healthz } from './routes/health.js';
 import { getVerseToday } from './routes/verse.js';
@@ -161,6 +164,9 @@ export function createApp(dependencies: AppDependencies): Express {
       '/internal/digest-generate',
       verifyPubSubPush(digestGenerationPush),
       express.json({ limit: '16kb' }),
+      // After verification only: a verified push whose body is not JSON is acked, like every
+      // other unretryable envelope, instead of answering 400 and having Pub/Sub redeliver it.
+      ackUnparseablePushBody(),
       createDigestGenerationPushHandler({
         getUser: (uid) => usersRepository.getById(uid),
         generation,

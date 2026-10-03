@@ -541,6 +541,20 @@ describe('POST /internal/digest-generate', () => {
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
+  it('acks a verified push whose body is not JSON with 200 and no body, without running the pipeline', async () => {
+    const generate = vi.fn(() => Promise.resolve({ digest: DIGEST, persisted: true }));
+    const running = await serve({ digestGeneration: { generate } });
+
+    const response = await running.fetch(
+      '/internal/digest-generate',
+      jsonPost('{"message": not json at all', 'scheduler-token'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('');
+    expect(generate).not.toHaveBeenCalled();
+  });
+
   it("answers a push carrying the app user's token with 403 in the error envelope", async () => {
     const running = await serve();
 
