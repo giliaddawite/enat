@@ -23,7 +23,7 @@
     "@google-cloud/secret-manager": "^7.0.0",
     "express": "^5.1.0",
     "jose": "^6.2.12",
-    "zod": "^4.4.3"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
