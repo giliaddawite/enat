@@ -85,10 +85,11 @@ const GOOGLE_ISSUERS = ['https://accounts.google.com', 'accounts.google.com'];
 export interface GoogleIdTokenVerifierOptions {
   /** Accepted values of the token's `aud` claim — normally the Android app's OAuth client ID. */
   readonly audience: readonly string[];
-  /** Overrides the key source. Tests point this at a local, in-memory key set; production
-   * passes one `createGoogleJwks()` result to every Google verifier so the JWKS cache is
-   * shared instead of fetched once per verifier instance. */
-  readonly jwks?: JWTVerifyGetKey;
+  /** The key source. Tests point this at a local, in-memory key set; production passes
+   * the one `createGoogleJwks()` result to every Google verifier so the JWKS cache is
+   * shared. Required, not defaulted (TICKET-306): a verifier that quietly built its own
+   * remote key set would reinstate the duplicate cache and second fetch this removed. */
+  readonly jwks: JWTVerifyGetKey;
 }
 
 /**
@@ -109,11 +110,9 @@ export function createGoogleJwks(): JWTVerifyGetKey {
 export function createGoogleIdTokenVerifier(
   options: GoogleIdTokenVerifierOptions,
 ): IdTokenVerifier {
-  const jwks = options.jwks ?? createRemoteJWKSet(GOOGLE_JWKS_URL);
-
   return {
     async verify(idToken) {
-      const payload = await verifyClaims(idToken, jwks, options.audience);
+      const payload = await verifyClaims(idToken, options.jwks, options.audience);
       const claims = GoogleIdTokenClaims.safeParse(payload);
       if (!claims.success) {
         throw new IdTokenRejectedError('invalid_claims', 'ID token payload failed validation', {
@@ -137,11 +136,9 @@ export function createGoogleIdTokenVerifier(
 export function createGoogleIdTokenSubjectVerifier(
   options: GoogleIdTokenVerifierOptions,
 ): IdTokenSubjectVerifier {
-  const jwks = options.jwks ?? createRemoteJWKSet(GOOGLE_JWKS_URL);
-
   return {
     async verifySubject(idToken) {
-      const payload = await verifyClaims(idToken, jwks, options.audience);
+      const payload = await verifyClaims(idToken, options.jwks, options.audience);
       const claims = GoogleIdTokenSubjectClaims.safeParse(payload);
       if (!claims.success) {
         throw new IdTokenRejectedError('invalid_claims', 'ID token payload failed validation', {
