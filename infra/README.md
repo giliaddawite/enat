@@ -243,7 +243,7 @@ Until all five are set, the service still boots and serves reads of already-gene
 digests; `/internal/digest-generate` (missing `PUBSUB_PUSH_AUDIENCE`/
 `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL`) is simply not mounted, and
 `POST /v1/digest/generate` (missing the other three) answers a clear 500 rather than
-crash-looping the service — see `backend/src/index.ts`.
+crash-looping the service — see `backend/src/composition.ts`.
 
 The boundary for `/internal/digest-generate` is `verifyPubSubPush`, as described under
 [Who may invoke the service](#who-may-invoke-the-service): the service is public, and the

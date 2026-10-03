@@ -43,7 +43,7 @@ export class GmailReconnectRequiredError extends Error {
 }
 
 /** One user's Gmail sync + summarizer, bound to their stored refresh token. Building this
- * is the composition root's job (real adapters in `index.ts`, fakes in tests) — this module
+ * is the composition root's job (real adapters in `composition.ts`, fakes in tests) — this module
  * only calls the two methods it needs. */
 export interface DigestUserPipeline {
   readonly gmailSync: GmailSyncService;

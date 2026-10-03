@@ -75,7 +75,7 @@ export function parseVerseDataset(data: unknown): readonly VerseDatasetEntry[] {
  * entries a human has checked against a licensed source qualify — CLAUDE.md's "Amharic
  * text changes get human review" enforced in code, not just in the PR description. An
  * all-draft dataset therefore yields an empty list, and the caller degrades to
- * `FALLBACK_VERSE` (see `index.ts`) rather than showing my mom unreviewed scripture.
+ * `FALLBACK_VERSE` (see `composition.ts`) rather than showing my mom unreviewed scripture.
  * The review-only `verified` flag is stripped here: it must never reach the API response.
  */
 export function servableVerses(

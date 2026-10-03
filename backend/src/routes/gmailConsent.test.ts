@@ -97,7 +97,7 @@ async function serve(tokenEndpoint: typeof fetch): Promise<Harness> {
       fetch: tokenEndpoint,
     }),
     // Stands in for real JWT verification: asserts uid-1 for the fixture id_token, null
-    // (does not verify) for anything else — the shape index.ts's wiring produces.
+    // (does not verify) for anything else — the shape composition.ts's wiring produces.
     verifyConsentIdToken: (idToken) =>
       Promise.resolve(idToken === 'id-token-for-uid-1' ? 'uid-1' : null),
     refreshTokens: { put },
@@ -168,7 +168,7 @@ describe('POST /v1/auth/gmail-consent', () => {
     // `openid` + the Gmail scopes (no `email` scope), so the exchange id_token may carry
     // a subject and no email. Verification must bind on `sub` alone. This test runs a
     // really signed JWT through `createGoogleIdTokenSubjectVerifier`, wired the way
-    // index.ts wires it, instead of the string-compare fake the other tests use.
+    // composition.ts wires it, instead of the string-compare fake the other tests use.
     const { privateKey, publicKey } = await generateKeyPair('RS256');
     const jwk: JWK = { ...(await exportJWK(publicKey)), alg: 'RS256', use: 'sig', kid: 'k1' };
     const subjectVerifier = createGoogleIdTokenSubjectVerifier({
@@ -196,7 +196,7 @@ describe('POST /v1/auth/gmail-consent', () => {
           id_token: idToken,
         }),
       }),
-      // Mirrors index.ts: rejected tokens become null (account_mismatch), outages throw.
+      // Mirrors composition.ts: rejected tokens become null (account_mismatch), outages throw.
       verifyConsentIdToken: async (token) => {
         try {
           return (await subjectVerifier.verifySubject(token)).googleUserId;

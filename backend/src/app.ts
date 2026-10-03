@@ -31,12 +31,12 @@ export interface AppDependencies {
   /**
    * The Gmail consent flow's server half (TICKET-202). Like `digestGeneration`, always
    * mounted: a deployment missing the Gmail OAuth secrets gets a service whose `connect`
-   * rejects (see `index.ts`), so the route answers a clear 5xx rather than a misleading 404.
+   * rejects (see `composition.ts`), so the route answers a clear 5xx rather than a misleading 404.
    */
   readonly gmailConsent: GmailConsentService;
   /**
    * The daily verse rotation (TICKET-106), bundled with the build and filtered to
-   * maintainer-verified entries in production — see `buildVerseSource` in `index.ts`.
+   * maintainer-verified entries in production — see `buildVerseSource` in `composition.ts`.
    * Kept under the authenticated `v1` router: auth holds for every request that reaches
    * this service. Know what that does NOT promise: a CDN's default cache key excludes the
    * Authorization header, so once a CDN fronts this service, cache hits on `/v1/verse/

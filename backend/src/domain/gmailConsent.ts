@@ -75,7 +75,7 @@ export interface GmailConsentDependencies {
   /** Verifies the exchange's id_token (signature, audience, expiry) and returns the Google
    * subject (`sub`) it asserts, or `null` for a token that does not verify. Throws only
    * for infrastructure failures (e.g. JWKS unreachable), which are ours, not the client's.
-   * Production binds this to the same OAuth client the exchange used — see `index.ts`. */
+   * Production binds this to the same OAuth client the exchange used — see `composition.ts`. */
   readonly verifyConsentIdToken: (idToken: string) => Promise<string | null>;
   /** `RefreshTokenStore.put` — encrypts, stores, returns the ref to persist. */
   readonly refreshTokens: { put(uid: string, refreshToken: string): Promise<string> };
