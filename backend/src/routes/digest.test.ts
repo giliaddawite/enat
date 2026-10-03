@@ -100,6 +100,9 @@ async function serve(deps: {
   digests: DigestStore;
   digestGeneration: DigestGenerationService;
   generatesPerMinute?: number;
+  /** Observes each request passing `authenticate` — the last awaited step before a digest
+   * route runs — so a test can know two requests are both inside the server. */
+  onAuthenticated?: () => void;
 }) {
   const logs = captureLogs();
   const config = loadConfig({ NODE_ENV: 'test' });
@@ -108,7 +111,13 @@ async function serve(deps: {
       config,
       logger: logs.logger,
       idTokenVerifier,
-      usersRepository,
+      usersRepository: {
+        ...usersRepository,
+        findOrCreateByGoogleId: (identity) => {
+          deps.onAuthenticated?.();
+          return usersRepository.findOrCreateByGoogleId(identity);
+        },
+      },
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
       digestGenerateRateLimiter: createRateLimiter({
         limit: deps.generatesPerMinute ?? 2,
@@ -329,6 +338,41 @@ describe('POST /v1/digest/generate', () => {
     expect([first.status, second.status, third.status]).toEqual([200, 200, 429]);
     expect(await third.json()).toMatchObject({ error: { code: 'too_many_requests' } });
     expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces two concurrent generates for one user into a single pipeline run that answers both', async () => {
+    // Generation completes only once both requests are inside the server: the second
+    // authenticate call schedules the release behind the microtasks that carry request two
+    // into the route, so the second call provably arrives while the first is in flight.
+    let authenticated = 0;
+    let release: () => void = () => undefined;
+    const bothInside = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const generate = vi.fn(async () => {
+      await bothInside;
+      return { digest: DIGEST, persisted: true };
+    });
+    const running = await serve({
+      digests: fakeDigests(),
+      digestGeneration: { generate },
+      onAuthenticated: () => {
+        authenticated += 1;
+        if (authenticated === 2) {
+          setImmediate(release);
+        }
+      },
+    });
+
+    const [first, second] = await Promise.all([
+      running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' }),
+      running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' }),
+    ]);
+
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(await first.json()).toEqual(DIGEST);
+    expect(await second.json()).toEqual(DIGEST);
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
   it('leaves GET /v1/digest served once the generate budget is exhausted', async () => {

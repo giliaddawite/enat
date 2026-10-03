@@ -79,7 +79,8 @@ choice, not an oversight, and the per-user rate limiter relies on it:
   budget, and a client whose requests land on N instances gets N × 60 req/min. With
   `maxScale: 1` there is exactly one window per user, so the 60 req/min figure in CLAUDE.md
   is the figure the deployed service enforces. The same holds for the smaller
-  `POST /v1/digest/generate` budget (`DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE`, default 2).
+  `POST /v1/digest/generate` budget (`DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE`, default 2)
+  and for the per-user in-flight guard that coalesces concurrent generations into one run.
 - The service serves one household. `containerConcurrency: 80` on a single instance is far
   more than that household's traffic, so the pin costs nothing in capacity; a second
   instance would only ever appear during a cold-start overlap or a retry storm — exactly

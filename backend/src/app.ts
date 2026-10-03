@@ -2,7 +2,11 @@ import express, { Router, type Express } from 'express';
 import type { IdTokenVerifier } from './adapters/idTokenVerifier.js';
 import type { UsersRepository } from './adapters/usersRepository.js';
 import type { Config } from './config.js';
-import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
+import {
+  withSingleFlightPerUser,
+  type DigestGenerationService,
+  type DigestStore,
+} from './domain/digestGeneration.js';
 import type { GmailConsentService } from './domain/gmailConsent.js';
 import type { RateLimiter } from './domain/rateLimiter.js';
 import type { DailyVerseSource } from './domain/verse.js';
@@ -107,10 +111,15 @@ export function createApp(dependencies: AppDependencies): Express {
 
   app.get('/healthz', healthz);
 
+  // One in-flight guard shared by the app's on-demand route and the scheduler's push, so
+  // the two colliding (a pull-to-refresh during the morning run) is one pipeline run, not
+  // two Gmail syncs and two Claude calls.
+  const generation = withSingleFlightPerUser(digestGeneration, { logger });
+
   const v1 = Router();
   v1.use(authenticate({ idTokenVerifier, usersRepository }));
   v1.use(rateLimit({ rateLimiter }));
-  const digestRouteDependencies = { digests, generation: digestGeneration, now, logger };
+  const digestRouteDependencies = { digests, generation, now, logger };
   v1.get('/digest', getDigest(digestRouteDependencies));
   // The router-level limiter has already taken one unit of the read budget by the time this
   // runs; the second limiter is the generate-specific budget on top of it.
@@ -142,7 +151,7 @@ export function createApp(dependencies: AppDependencies): Express {
       express.json({ limit: '16kb' }),
       createDigestGenerationPushHandler({
         getUser: (uid) => usersRepository.getById(uid),
-        generation: digestGeneration,
+        generation,
         logger,
       }),
     );
