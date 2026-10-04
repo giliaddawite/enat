@@ -50,7 +50,10 @@ makes the application-layer checks the entire boundary — there is no IAM gate 
   `email` required to equal `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL` — the one service
   account the push subscription is configured to sign as. An arbitrary caller cannot obtain
   such a token, because only that service account's key can mint one with that audience.
-  The route is not mounted at all when either variable is unset.
+  The check runs before the request body is parsed (the token is a header), and the body
+  parser that follows it accepts at most 16kb — an unauthenticated caller never gets this
+  service to read, let alone parse, what it sent. The route is not mounted at all when
+  either variable is unset.
 - **`/healthz`** is open and dependency-free, for Cloud Run's startup probe.
 - Everything else — unmatched paths included — leaves through `notFound` and the error
   handler, which never include detail.
@@ -65,6 +68,37 @@ with `ingress: internal` and `run.invoker` granted only to `enat-scheduler`. Tha
 IAM gate in front of the token check at the cost of a second service to deploy and
 monitor. It is not done today because the token check is already a complete
 authentication of the caller, and one service is cheaper to run at zero.
+
+## One instance, and why the rate limiter depends on it (TICKET-306)
+
+`service.staging.yaml` pins `autoscaling.knative.dev/maxScale: '1'`. This is a deliberate
+choice, not an oversight, and the per-user rate limiter relies on it:
+
+- `createRateLimiter` (`backend/src/domain/rateLimiter.ts`) keeps each user's request
+  window in **process memory**. Every Cloud Run instance therefore grants its own full
+  budget, and a client whose requests land on N instances gets N × 60 req/min. With
+  `maxScale: 1` there is exactly one window per user, so the 60 req/min figure in CLAUDE.md
+  is the figure the deployed service enforces. The same holds for the smaller
+  `POST /v1/digest/generate` budget (`DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE`, default 2)
+  and for the per-user in-flight guard that coalesces concurrent generations into one run.
+- The service serves one household. `containerConcurrency: 80` on a single instance is far
+  more than that household's traffic, so the pin costs nothing in capacity; a second
+  instance would only ever appear during a cold-start overlap or a retry storm — exactly
+  the moments the budget exists to bound.
+- A cold start still resets the window (under-enforcement for one minute, never
+  over-enforcement). Accepted: the limiter protects a budget, not a security boundary.
+
+`backend/src/http/rateLimit.deployment.test.ts` reads every `cloudrun/service.*.yaml` and
+fails if `maxScale` is anything but `'1'`, so the manifest and the limiter cannot drift
+apart without someone changing both on purpose.
+
+**If the app ever serves many users** and one instance is no longer enough, raising
+`maxScale` must be preceded by replacing the limiter's window with a shared store: a
+Firestore-backed window keyed by `uid` (one document per user per window, incremented with
+a transaction or `FieldValue.increment`, with `expireAt` under a TTL policy like the other
+collections above). That costs one Firestore write per request, which is why it is not done
+for one household today. The `RateLimiter` port (`tryConsume(key)`) is already the seam; the
+HTTP middleware and routes would not change.
 
 ## Prerequisites not yet in place
 
@@ -161,12 +195,18 @@ gcloud pubsub topics create enat-digest-generate --project PROJECT_ID
 # The push subscription. --push-auth-token-audience is the URL PUBSUB_PUSH_AUDIENCE must be
 # set to on the Cloud Run service (see .env.example) — verifyPubSubPush checks the pushed
 # OIDC token's `aud` claim against exactly this value.
+# --ack-deadline matches the service's timeoutSeconds: 60 — a generation run (Gmail sync plus
+# a Claude call) routinely exceeds Pub/Sub's 10s default, which would redeliver the message
+# mid-run and start a second, paid run. --min-retry-delay spaces out retries of a genuine
+# 5xx so a hiccup is not hammered.
 gcloud pubsub subscriptions create enat-digest-generate-push \
   --project PROJECT_ID \
   --topic enat-digest-generate \
   --push-endpoint "https://<staging-service-url>/internal/digest-generate" \
   --push-auth-service-account "enat-scheduler@PROJECT_ID.iam.gserviceaccount.com" \
-  --push-auth-token-audience "https://<staging-service-url>/internal/digest-generate"
+  --push-auth-token-audience "https://<staging-service-url>/internal/digest-generate" \
+  --ack-deadline 60 \
+  --min-retry-delay 10s
 
 # 6:30 AM America/New_York, daily. The message body is the one piece of per-user state this
 # single-tenant deployment needs: the Google user id (Firestore `users` document id) to
@@ -211,7 +251,7 @@ Until all five are set, the service still boots and serves reads of already-gene
 digests; `/internal/digest-generate` (missing `PUBSUB_PUSH_AUDIENCE`/
 `PUBSUB_INVOKER_SERVICE_ACCOUNT_EMAIL`) is simply not mounted, and
 `POST /v1/digest/generate` (missing the other three) answers a clear 500 rather than
-crash-looping the service — see `backend/src/index.ts`.
+crash-looping the service — see `backend/src/composition.ts`.
 
 The boundary for `/internal/digest-generate` is `verifyPubSubPush`, as described under
 [Who may invoke the service](#who-may-invoke-the-service): the service is public, and the

@@ -77,6 +77,7 @@ async function serve(verses: DailyVerseSource, now: () => Date = NOW) {
       idTokenVerifier,
       usersRepository,
       rateLimiter: createRateLimiter({ limit: 60, windowMs: 60_000, now: () => 0 }),
+      digestGenerateRateLimiter: createRateLimiter({ limit: 2, windowMs: 60_000, now: () => 0 }),
       digests,
       digestGeneration,
       gmailConsent: { connect: () => Promise.reject(new Error('not exercised by these tests')) },

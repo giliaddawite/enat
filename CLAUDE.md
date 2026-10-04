@@ -184,7 +184,8 @@ iterating; run the full suite once before declaring work done.
   content. This protects my mom's private mail; treat it as the hardest rule in this file.
 - **Auth on every request:** Google ID token verified (signature, audience, expiry) against
   cached JWKS. 401s leak no detail. Per-user rate limiting (60 req/min) protects the Claude
-  API budget.
+  API budget. The limit is enforced per instance (in-process window) and the service runs
+  exactly one instance by design (`maxScale: '1'`, see `infra/README.md`).
 - **Validate input at the trust boundary;** parameterized queries only; error responses never
   include stack traces.
 - **Dependencies are a supply chain.** Dependabot enabled; add a dependency only when it earns

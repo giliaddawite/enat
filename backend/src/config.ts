@@ -19,6 +19,12 @@ export interface Config {
   /** Requests per user per 60s window before `429`. Defaults to the ticket's 60 req/min. */
   readonly rateLimitPerMinute: number;
   /**
+   * The separate, smaller budget for `POST /v1/digest/generate` (TICKET-306): each call is
+   * billed in Gmail and Claude requests, so it must not be able to spend the whole read
+   * budget. Drawn in addition to `rateLimitPerMinute`, never instead of it. Defaults to 2.
+   */
+  readonly digestGenerateRateLimitPerMinute: number;
+  /**
    * Claude API key for the digest summarizer (TICKET-104/105). Optional even in production:
    * generation is one feature of this service, not a boot-time requirement, so a service
    * deployed before this secret is provisioned still serves `/healthz` and reads of
@@ -93,6 +99,7 @@ const DEFAULT_PORT = 8080;
 const DEFAULT_ENVIRONMENT: Environment = 'development';
 const DEFAULT_LOG_LEVEL: LogLevel = 'info';
 const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
+const DEFAULT_DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE = 2;
 
 /**
  * Builds the Config from a raw environment. Pure: the caller owns reading process.env
@@ -144,6 +151,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     DEFAULT_RATE_LIMIT_PER_MINUTE,
     problems,
   );
+  const digestGenerateRateLimitPerMinute = parsePositiveInteger(
+    'DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE',
+    env.DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE,
+    DEFAULT_DIGEST_GENERATE_RATE_LIMIT_PER_MINUTE,
+    problems,
+  );
 
   const claudeApiKey = nonBlank(env.CLAUDE_API_KEY);
   const googleOAuthClientId = nonBlank(env.GOOGLE_OAUTH_CLIENT_ID);
@@ -160,6 +173,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     environment,
     logLevel,
     rateLimitPerMinute,
+    digestGenerateRateLimitPerMinute,
     ...(gcpProjectId ? { gcpProjectId } : {}),
     ...(googleOAuthAudience ? { googleOAuthAudience } : {}),
     ...(claudeApiKey ? { claudeApiKey } : {}),

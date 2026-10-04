@@ -2,7 +2,11 @@ import express, { Router, type Express } from 'express';
 import type { IdTokenVerifier } from './adapters/idTokenVerifier.js';
 import type { UsersRepository } from './adapters/usersRepository.js';
 import type { Config } from './config.js';
-import type { DigestGenerationService, DigestStore } from './domain/digestGeneration.js';
+import {
+  withSingleFlightPerUser,
+  type DigestGenerationService,
+  type DigestStore,
+} from './domain/digestGeneration.js';
 import type { GmailConsentService } from './domain/gmailConsent.js';
 import type { RateLimiter } from './domain/rateLimiter.js';
 import type { DailyVerseSource } from './domain/verse.js';
@@ -15,7 +19,10 @@ import { rateLimit } from './http/rateLimit.js';
 import { requestId } from './http/requestId.js';
 import { requestLogging } from './http/requestLogging.js';
 import { generateDigest, getDigest } from './routes/digest.js';
-import { createDigestGenerationPushHandler } from './routes/digestGenerationPush.js';
+import {
+  ackUnparseablePushBody,
+  createDigestGenerationPushHandler,
+} from './routes/digestGenerationPush.js';
 import { connectGmail } from './routes/gmailConsent.js';
 import { healthz } from './routes/health.js';
 import { getVerseToday } from './routes/verse.js';
@@ -26,17 +33,25 @@ export interface AppDependencies {
   readonly idTokenVerifier: IdTokenVerifier;
   readonly usersRepository: UsersRepository;
   readonly rateLimiter: RateLimiter;
+  /**
+   * The separate, smaller budget for `POST /v1/digest/generate` (TICKET-306). A generate
+   * call is billed in Gmail and Claude requests, so it draws from this limiter *and* the
+   * shared `rateLimiter` — the read budget stays intact when generation is exhausted, and
+   * generation can never spend the whole read budget. `config.digestGenerateRateLimitPerMinute`
+   * sets its size (default 2/min).
+   */
+  readonly digestGenerateRateLimiter: RateLimiter;
   readonly digests: DigestStore;
   readonly digestGeneration: DigestGenerationService;
   /**
    * The Gmail consent flow's server half (TICKET-202). Like `digestGeneration`, always
    * mounted: a deployment missing the Gmail OAuth secrets gets a service whose `connect`
-   * rejects (see `index.ts`), so the route answers a clear 5xx rather than a misleading 404.
+   * rejects (see `composition.ts`), so the route answers a clear 5xx rather than a misleading 404.
    */
   readonly gmailConsent: GmailConsentService;
   /**
    * The daily verse rotation (TICKET-106), bundled with the build and filtered to
-   * maintainer-verified entries in production — see `buildVerseSource` in `index.ts`.
+   * maintainer-verified entries in production — see `buildVerseSource` in `composition.ts`.
    * Kept under the authenticated `v1` router: auth holds for every request that reaches
    * this service. Know what that does NOT promise: a CDN's default cache key excludes the
    * Authorization header, so once a CDN fronts this service, cache hits on `/v1/verse/
@@ -60,6 +75,10 @@ export interface AppDependencies {
   };
 }
 
+/** Under `timeoutSeconds: 60` in infra/cloudrun/service.staging.yaml — see the guard in
+ * `createApp` for why a generation run is abandoned by its waiters before then. */
+const GENERATION_IN_FLIGHT_TIMEOUT_MS = 50_000;
+
 /**
  * Assembles the middleware chain. Order matters: an id exists before anything logs, and
  * every response — including unmatched routes — leaves through errorHandler.
@@ -77,6 +96,7 @@ export function createApp(dependencies: AppDependencies): Express {
     idTokenVerifier,
     usersRepository,
     rateLimiter,
+    digestGenerateRateLimiter,
     digests,
     digestGeneration,
     gmailConsent,
@@ -98,12 +118,31 @@ export function createApp(dependencies: AppDependencies): Express {
 
   app.get('/healthz', healthz);
 
+  // One in-flight guard shared by the app's on-demand route and the scheduler's push, so
+  // the two colliding (a pull-to-refresh during the morning run) is one pipeline run, not
+  // two Gmail syncs and two Claude calls. The deadline sits under Cloud Run's 60s request
+  // timeout: a stalled run is abandoned by its waiters before the platform cuts them off,
+  // and the next caller starts afresh instead of joining it.
+  const generation = withSingleFlightPerUser(digestGeneration, {
+    logger,
+    timeoutMs: GENERATION_IN_FLIGHT_TIMEOUT_MS,
+  });
+
   const v1 = Router();
   v1.use(authenticate({ idTokenVerifier, usersRepository }));
   v1.use(rateLimit({ rateLimiter }));
-  const digestRouteDependencies = { digests, generation: digestGeneration, now, logger };
+  const digestRouteDependencies = { digests, generation, now, logger };
   v1.get('/digest', getDigest(digestRouteDependencies));
-  v1.post('/digest/generate', generateDigest(digestRouteDependencies));
+  // The router-level limiter has already taken one unit of the read budget by the time this
+  // runs; the second limiter is the generate-specific budget on top of it. So a generate
+  // request always costs one unit of the shared 60/min budget, even when the generate
+  // limiter then refuses it with 429 — acceptable for one user, whose refreshes number in
+  // the handful per day, and simpler than exempting one route from the router-level guard.
+  v1.post(
+    '/digest/generate',
+    rateLimit({ rateLimiter: digestGenerateRateLimiter }),
+    generateDigest(digestRouteDependencies),
+  );
   // Body parsing only on the one route that takes a body. The limit is deliberately tiny:
   // the body is a single OAuth auth code, so anything larger is not a consent request.
   v1.post(
@@ -116,14 +155,21 @@ export function createApp(dependencies: AppDependencies): Express {
 
   // Not behind /v1's Google end-user auth: the caller is Pub/Sub, not the app, and its own
   // OIDC token is verified by verifyPubSubPush. See the AppDependencies doc comment above.
+  // Verification runs before the body parser on purpose: the token is in the Authorization
+  // header, so an unauthenticated caller is answered without this service ever reading or
+  // parsing what it sent. The limit is small because a push envelope is a base64 `{"uid"}`
+  // payload plus Pub/Sub's message metadata — anything larger is not a scheduler push.
   if (digestGenerationPush !== undefined) {
     app.post(
       '/internal/digest-generate',
-      express.json(),
       verifyPubSubPush(digestGenerationPush),
+      express.json({ limit: '16kb' }),
+      // After verification only: a verified push whose body is not JSON is acked, like every
+      // other unretryable envelope, instead of answering 400 and having Pub/Sub redeliver it.
+      ackUnparseablePushBody(),
       createDigestGenerationPushHandler({
         getUser: (uid) => usersRepository.getById(uid),
-        generation: digestGeneration,
+        generation,
         logger,
       }),
     );

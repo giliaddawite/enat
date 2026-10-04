@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { IdTokenRejectedError, type IdTokenVerifier } from '../adapters/idTokenVerifier.js';
 import type { UsersRepository } from '../adapters/usersRepository.js';
@@ -140,6 +140,7 @@ interface Overrides {
   readonly digestGeneration?: DigestGenerationService;
   readonly gmailConsent?: GmailConsentService;
   readonly requestsPerMinute?: number;
+  readonly usersRepository?: UsersRepository;
 }
 
 async function serve(overrides: Overrides = {}): Promise<TestServer> {
@@ -149,12 +150,13 @@ async function serve(overrides: Overrides = {}): Promise<TestServer> {
       config: loadConfig({ NODE_ENV: 'test' }),
       logger: logs.logger,
       idTokenVerifier,
-      usersRepository,
+      usersRepository: overrides.usersRepository ?? usersRepository,
       rateLimiter: createRateLimiter({
         limit: overrides.requestsPerMinute ?? 60,
         windowMs: 60_000,
         now: () => 0,
       }),
+      digestGenerateRateLimiter: createRateLimiter({ limit: 2, windowMs: 60_000, now: () => 0 }),
       digests: overrides.digests ?? storeWith([]),
       digestGeneration: overrides.digestGeneration ?? generation(DIGEST),
       gmailConsent: overrides.gmailConsent ?? consent(undefined),
@@ -471,6 +473,86 @@ describe('POST /internal/digest-generate', () => {
 
     expect(response.status).toBe(401);
     expect((await bodyOf(response, ErrorResponse)).error.code).toBe('unauthorized');
+  });
+
+  it('rejects an unauthenticated push before reading its body — malformed JSON still gets the 401, not a 400', async () => {
+    const running = await serve();
+
+    const response = await running.fetch('/internal/digest-generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"message": not json at all',
+    });
+
+    expect(response.status).toBe(401);
+    expect((await bodyOf(response, ErrorResponse)).error.code).toBe('unauthorized');
+  });
+
+  it('answers an authenticated push whose body exceeds the 16kb limit with 413 in the error envelope', async () => {
+    const running = await serve();
+    const oversized = JSON.stringify({ message: { data: 'A'.repeat(17_000) } });
+
+    const response = await running.fetch(
+      '/internal/digest-generate',
+      jsonPost(oversized, 'scheduler-token'),
+    );
+
+    expect(response.status).toBe(413);
+    await bodyOf(response, ErrorResponse);
+  });
+
+  it('shares one in-flight guard with POST /v1/digest/generate: a push during an app-triggered run joins it', async () => {
+    // The app's generate is held open until the push is inside the server. The push
+    // handler's getById is its last awaited step before calling generate, so releasing
+    // behind that call (after the microtasks that carry the push into generate) makes the
+    // collision deterministic rather than a race on loopback timing.
+    let release: () => void = () => undefined;
+    const pushInside = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let generateStarted: () => void = () => undefined;
+    const appRunStarted = new Promise<void>((resolve) => {
+      generateStarted = resolve;
+    });
+    const generate = vi.fn(async () => {
+      generateStarted();
+      await pushInside;
+      return { digest: DIGEST, persisted: true };
+    });
+    const running = await serve({
+      digestGeneration: { generate },
+      usersRepository: {
+        ...usersRepository,
+        getById: (uid) => {
+          setImmediate(release);
+          return usersRepository.getById(uid);
+        },
+      },
+    });
+
+    const appCall = running.fetch('/v1/digest/generate', { ...AUTH, method: 'POST' });
+    await appRunStarted;
+    const push = running.fetch('/internal/digest-generate', jsonPost(envelope, 'scheduler-token'));
+    const [appResponse, pushResponse] = await Promise.all([appCall, push]);
+
+    expect(appResponse.status).toBe(200);
+    expect(await bodyOf(appResponse, DigestResponse)).toEqual(DIGEST);
+    expect(pushResponse.status).toBe(204);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('acks a verified push whose body is not JSON with 200 and no body, without running the pipeline', async () => {
+    const generate = vi.fn(() => Promise.resolve({ digest: DIGEST, persisted: true }));
+    const running = await serve({ digestGeneration: { generate } });
+
+    const response = await running.fetch(
+      '/internal/digest-generate',
+      jsonPost('{"message": not json at all', 'scheduler-token'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('');
+    expect(generate).not.toHaveBeenCalled();
   });
 
   it("answers a push carrying the app user's token with 403 in the error envelope", async () => {

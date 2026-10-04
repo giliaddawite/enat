@@ -1,4 +1,4 @@
-import type { RequestHandler, Response } from 'express';
+import type { ErrorRequestHandler, RequestHandler, Response } from 'express';
 import {
   GmailNotConnectedError,
   GmailReconnectRequiredError,
@@ -17,7 +17,8 @@ import type { Logger } from '../logging/logger.js';
  *
  * Never retried, always acked (2xx) — retrying cannot fix any of these:
  * - a push envelope or payload that fails validation (a subscription misconfiguration, not
- *   a transient fault)
+ *   a transient fault) — including a body that is not JSON at all, which the body parser
+ *   reports and `ackUnparseablePushBody` below turns into the same ack
  * - a uid naming no known user (a stale or hand-edited scheduler payload)
  * - a user who has not completed the Gmail consent flow (TICKET-202)
  * - a user whose Gmail grant was revoked (`invalid_grant`) — only re-running consent on the
@@ -38,6 +39,33 @@ export function createDigestGenerationPushHandler(
   return (req, res, next) => {
     void handle(req.body, res, deps).then(() => undefined, next);
   };
+}
+
+/**
+ * Mounted between the body parser and the handler, after `verifyPubSubPush`. A verified
+ * push whose body is not JSON is a misconfiguration retrying cannot fix, so it is acked
+ * like every other invalid envelope instead of answered 400 — which Pub/Sub would retry
+ * until the message expired. Only the parser's parse failure is caught; every other error
+ * (an oversized body included) keeps its status.
+ */
+export function ackUnparseablePushBody(): ErrorRequestHandler {
+  return (error: unknown, req, res, next) => {
+    if (!isBodyParseFailure(error)) {
+      next(error);
+      return;
+    }
+    // Request id only — the body is unparsed bytes from the wire and must not be logged.
+    req.log?.warn('pubsub push body was not valid JSON; acked so Pub/Sub does not retry it');
+    res.status(200).end();
+  };
+}
+
+function isBodyParseFailure(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { type?: unknown }).type === 'entity.parse.failed'
+  );
 }
 
 async function handle(

@@ -36,9 +36,21 @@ export interface ClaudeSummarizerOptions {
   readonly fetch?: typeof fetch;
   /** SDK-level transport retries for 429/5xx; the domain's single schema retry is separate. */
   readonly maxRetries?: number;
+  /** Per-attempt request timeout. Defaults to `DEFAULT_CLAUDE_TIMEOUT_MS`. */
+  readonly timeoutMs?: number;
   /** Receives usage metadata only — model, token counts, stop reason. Never content. */
   readonly logger?: Logger;
 }
+
+/**
+ * The SDK's own default is ten minutes per attempt, which is longer than Cloud Run keeps
+ * a request open (`timeoutSeconds: 60`) — a stalled Claude call would otherwise pin the
+ * single-flight guard in `domain/digestGeneration.ts` and outlive the request that started
+ * it. Under the guard's own deadline so the call fails first and its error is the one
+ * reported, rather than a generic timeout. One digest batch normally completes in a few
+ * seconds; this is a stall detector, not a budget.
+ */
+export const DEFAULT_CLAUDE_TIMEOUT_MS = 45_000;
 
 export function createClaudeSummarizer(options: ClaudeSummarizerOptions): SummarizerPort {
   const model = options.model ?? DEFAULT_CLAUDE_MODEL;
@@ -47,6 +59,7 @@ export function createClaudeSummarizer(options: ClaudeSummarizerOptions): Summar
     baseURL: ANTHROPIC_API_BASE_URL,
     logLevel: 'off',
     maxRetries: options.maxRetries ?? 2,
+    timeout: options.timeoutMs ?? DEFAULT_CLAUDE_TIMEOUT_MS,
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
   });
 

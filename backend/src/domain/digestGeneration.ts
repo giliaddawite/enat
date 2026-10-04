@@ -2,6 +2,7 @@ import { assembleDigest, needsPersist, toDateKey, type Digest } from './digest.j
 import type { DigestSummarizer } from './digestPipeline.js';
 import type { GmailSyncService } from './gmailSync.js';
 import type { Logger } from '../logging/logger.js';
+import { createSingleFlight, type SingleFlightOptions } from './singleFlight.js';
 import type { User } from './user.js';
 
 /**
@@ -43,7 +44,7 @@ export class GmailReconnectRequiredError extends Error {
 }
 
 /** One user's Gmail sync + summarizer, bound to their stored refresh token. Building this
- * is the composition root's job (real adapters in `index.ts`, fakes in tests) — this module
+ * is the composition root's job (real adapters in `composition.ts`, fakes in tests) — this module
  * only calls the two methods it needs. */
 export interface DigestUserPipeline {
   readonly gmailSync: GmailSyncService;
@@ -118,6 +119,40 @@ export function createDigestGenerationService(
         emailCount: fresh.emailCount,
       });
       return { digest: fresh, persisted: true };
+    },
+  };
+}
+
+/**
+ * Coalesces concurrent `generate` calls for one user into a single pipeline run
+ * (TICKET-306). Two pull-to-refreshes in quick succession, or the app's on-demand call
+ * colliding with the scheduler's push, used to run the pipeline twice: the summary cache
+ * made the second Firestore write cheap, but the second Gmail sync and Claude call were
+ * still paid. The second caller now awaits the first run's promise and gets the same
+ * result — or the same failure; nothing is swallowed — and the entry is cleared when the
+ * run settles, so the next call is a fresh run that picks up newer mail.
+ *
+ * A run that stalls (an upstream fetch with no timeout of its own) is released at the
+ * single-flight deadline — see `SingleFlightOptions.timeoutMs` — so one hung Gmail or
+ * Claude call cannot pin every later generate and scheduler push for that user to it.
+ *
+ * Keyed by `uid`, in memory: correct while the service runs one instance by design, the
+ * same assumption the rate limiter makes (infra/README.md).
+ */
+export function withSingleFlightPerUser(
+  service: DigestGenerationService,
+  options: SingleFlightOptions & { readonly logger?: Logger } = {},
+): DigestGenerationService {
+  const { logger, ...singleFlightOptions } = options;
+  const runs = createSingleFlight<DigestGenerationResult>(singleFlightOptions);
+  return {
+    generate(user) {
+      if (runs.isInFlight(user.uid)) {
+        logger?.info('digest generation joined the run already in flight for this user', {
+          uid: user.uid,
+        });
+      }
+      return runs.run(user.uid, () => service.generate(user));
     },
   };
 }
