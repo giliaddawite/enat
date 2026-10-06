@@ -10,13 +10,14 @@ Implements TICKET-002. Two GitHub Actions workflows plus one reusable one:
 
 ## Why the jobs are guarded
 
-`/backend` and `/android` don't exist yet — they land with TICKET-101 and
-TICKET-201. Each workflow starts with a `detect` job that checks for
-`backend/package.json` and `android/settings.gradle.kts`; the backend/android
-jobs run only when the corresponding directory is present. Until then, PRs and
-merges to `main` still run the gitleaks scan and pass cleanly — the pipeline
-doesn't block on tickets it doesn't depend on. No workflow file needs to
-change when TICKET-101/201 merge; the jobs just start running.
+Each workflow starts with a `detect` job that checks for `backend/package.json`
+and `android/settings.gradle.kts`; the backend/android jobs run only when the
+corresponding directory is present. The guard dates from before TICKET-101 and
+TICKET-201 landed those directories — it let PRs and merges to `main` run the
+gitleaks scan and pass cleanly while the pipeline had nothing else to check.
+Both directories exist now, so both jobs always run; the guard stays because it
+costs nothing and means no workflow file changes if a workspace is ever split or
+moved.
 
 ## The one required status check
 

@@ -16,14 +16,28 @@ Two deliverables live in this repository:
   incrementally, summarizes in batched Claude API calls, serves a pre-built
   daily digest and a daily verse.
 
-Neither directory exists yet — the repo is at the bootstrap stage. The backend
-skeleton lands with [TICKET-101](docs/tickets/TICKET-101) and the Android
-scaffold with [TICKET-201](docs/tickets/TICKET-201). This README describes the
-setup path those tickets build toward; steps marked **(soon)** activate as the
-corresponding ticket merges.
-
 See [docs/architecture.md](docs/architecture.md) for how the pieces fit
 together, and [CONTRIBUTING.md](CONTRIBUTING.md) before pushing a branch.
+
+Built with Claude Code as a pair programmer; [CLAUDE.md](CLAUDE.md) defines the
+standards it works against, and [`.claude/agents`](.claude/agents) holds the
+reviewer agents it runs. All code is reviewed through PRs.
+
+## Status
+
+Work proceeds ticket by ticket from [docs/tickets](docs/tickets); a ticket is
+done when every acceptance criterion passes, not when the code compiles.
+
+| Area | State |
+| --- | --- |
+| Repo scaffolding, CI/CD (TICKET-001, 002) | Done |
+| Google Cloud environments (TICKET-003) | Staging provisioned; production project not yet created |
+| Backend API — auth, Gmail sync, summarization, digest, verse (TICKET-101–106) | Done, plus hardening follow-ups (TICKET-303, 305, 306) |
+| Android app — scaffold, sign-in + consent, home hub, digest, verse + reminder (TICKET-201–205) | Done |
+| Launcher / simplification mode (TICKET-206, stretch) | Not started |
+| Testing baseline, security & privacy review (TICKET-301, 303) | Done |
+| Observability & cost monitoring (TICKET-302) | Partial — structured logs, request IDs and Cloud Trace correlation are in; dashboards and alerts are not |
+| Field test with mom (TICKET-304) | Not started |
 
 ## Prerequisites
 
@@ -43,8 +57,8 @@ preflight script treats them as warnings, not failures.
 ## Setup — fresh clone to running dev environment
 
 ```bash
-git clone <repo-url> fable-cooking
-cd fable-cooking
+git clone https://github.com/giliaddawite/enat.git
+cd enat
 
 # 1. Verify your machine has everything (fails loudly if not)
 ./scripts/preflight.sh
@@ -57,7 +71,7 @@ cp .env.example .env
 nvm use   # reads .nvmrc
 ```
 
-### Backend (soon — TICKET-101)
+### Backend
 
 ```bash
 cd backend
@@ -74,10 +88,14 @@ staging/prod work:
 gcloud auth application-default login
 ```
 
-### Android (soon — TICKET-201)
+### Android
 
 Open `/android` in Android Studio, let Gradle sync, then run the `debug`
-variant — it points at the staging backend. Or from the CLI:
+variant — it points at the staging backend. The staging URL and the web OAuth
+client id are configuration, not secrets, but they stay out of version control:
+put `enatApiBaseUrl` and `enatGoogleWebClientId` in `android/local.properties`
+(gitignored). A fresh checkout compiles without them and shows a configuration
+error on the setup screen. Or from the CLI:
 
 ```bash
 cd android
@@ -86,8 +104,8 @@ cd android
 
 ## Everyday commands
 
-Run these from the directory they belong to. All of them activate with
-TICKET-101 (backend) / TICKET-201 (Android).
+Run these from the directory they belong to. CLAUDE.md has the full table,
+including how to re-record screenshot goldens.
 
 | Task | Command |
 | --- | --- |
@@ -95,33 +113,41 @@ TICKET-101 (backend) / TICKET-201 (Android).
 | Backend tests | `npm test` |
 | Backend tests with the CI coverage gate | `npm run test:coverage` |
 | Backend lint | `npm run lint` |
+| Backend format check | `npm run format:check` |
 | Backend type check | `npm run typecheck` |
 | Android debug build | `./gradlew assembleDebug` |
 | Android tests | `./gradlew testDebugUnitTest` |
+| Android tests with the screenshot gate | `./gradlew testDebugUnitTest verifyRoborazziDebug` |
 | Android lint | `./gradlew ktlintCheck` |
 
-CI runs lint + unit tests + build check on every PR into `main`; a failing
-check blocks merge. Merging to `main` deploys the backend to Cloud Run staging
-and builds a signed Android release AAB. See [docs/ci-cd.md](docs/ci-cd.md)
-for the workflows and required secrets.
+CI runs lint, format, type and unit-test checks plus a secrets scan on every PR
+into `main`; a failing check blocks merge. Merging to `main` deploys the backend
+to Cloud Run staging and builds a signed Android release AAB. See
+[docs/ci-cd.md](docs/ci-cd.md) for the workflows and required secrets.
 
 ## Repository layout
 
 ```
-fable-cooking/
+enat/
+├── .claude/
+│   └── agents/           # reviewer and implementer agents for Claude Code
 ├── .github/
-│   └── workflows/    # PR checks + main-branch deploy (TICKET-002)
-├── android/          # (soon) Compose app — TICKET-2xx
-├── backend/          # (soon) Cloud Run API — TICKET-1xx
-├── infra/            # (soon) deploy config & IaC
+│   └── workflows/        # PR checks + main-branch deploy (TICKET-002)
+├── android/              # Compose app — TICKET-2xx
+├── backend/              # Cloud Run API — TICKET-1xx
+├── infra/                # Cloud Run service manifest, IAM and deploy notes
 ├── docs/
 │   ├── architecture.md
+│   ├── backend-runtime.md
 │   ├── ci-cd.md
-│   └── tickets/      # the full backlog, TICKET-001 … TICKET-304
+│   ├── digest-cost.md
+│   ├── privacy.md
+│   ├── verse-licensing.md
+│   └── tickets/          # the full backlog, TICKET-001 … TICKET-306
 ├── scripts/
-│   └── preflight.sh  # environment checker
-├── CLAUDE.md         # engineering standards (read by Claude Code)
-└── CONTRIBUTING.md   # branch naming, commits, review
+│   └── preflight.sh      # environment checker
+├── CLAUDE.md             # engineering standards (read by Claude Code)
+└── CONTRIBUTING.md       # branch naming, commits, review
 ```
 
 ## Security notes
