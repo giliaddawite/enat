@@ -71,7 +71,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - run: ./gradlew ktlintCheck
       # TICKET-301: one JVM test run covers the ViewModel/Compose tests and the
       # font-scale screenshot goldens — verifyRoborazziDebug flips the same
