@@ -79,7 +79,7 @@ jobs:
       - run: ./gradlew testDebugUnitTest verifyRoborazziDebug
       - name: upload screenshot diffs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: roborazzi-diffs
           path: android/app/build/outputs/roborazzi
